@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Declutter</title>
+    <!-- Trello Power-Up SDK -->
+    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+    <!-- Tailwind CDN for the popup styles -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        margin: 0;
+        background: #0d1117;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .scrollbar-thin::-webkit-scrollbar {
+        width: 4px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: #ffffff20;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="module">
+      // ── Trello Power-Up SDK init ──────────────────────────────────────────────
+      var t = TrelloPowerUp.iframe();
+      var TRELLO_APP_KEY = "%VITE_TRELLO_APP_KEY%"; // replaced at build time via vite
+
+      // ── Auth helpers ──────────────────────────────────────────────────────────
+      function getToken() {
+        return t.get("member", "private", "token");
+      }
+
+      function saveToken(token) {
+        return t.set("member", "private", "token", token);
+      }
+
+      function authorizeWithTrello() {
+        return t
+          .authorize(
+            `https://trello.com/1/authorize?` +
+              `expiration=never&name=Declutter&scope=read,write` +
+              `&response_type=token&key=${TRELLO_APP_KEY}`,
+            {
+              height: 680,
+              width: 580,
+              validToken: (token) => token && token.length > 0,
+            },
+          )
+          .then((token) => saveToken(token).then(() => token));
+      }
+
+      // ── Trello API helper ─────────────────────────────────────────────────────
+      function trelloFetch(path, token) {
+        const sep = path.includes("?") ? "&" : "?";
+        return fetch(
+          `https://api.trello.com/1${path}${sep}key=${TRELLO_APP_KEY}&token=${token}`,
+        ).then((r) => r.json());
+      }
+
+      function daysSince(dateStr) {
+        return Math.floor(
+          (Date.now() - new Date(dateStr).getTime()) / 86_400_000,
+        );
+      }
+
+      // ── Render helpers ────────────────────────────────────────────────────────
+      function el(tag, attrs, ...children) {
+        const e = document.createElement(tag);
+        Object.entries(attrs || {}).forEach(([k, v]) => {
+          if (k === "className") e.className = v;
+          else if (k.startsWith("on"))
+            e.addEventListener(k.slice(2).toLowerCase(), v);
+          else e.setAttribute(k, v);
+        });
+        children
+          .flat()
+          .forEach(
+            (c) =>
+              c &&
+              e.appendChild(
+                typeof c === "string" ? document.createTextNode(c) : c,
+              ),
+          );
+        return e;
+      }
+
+      // ── Sign-in view ──────────────────────────────────────────────────────────
+      function renderSignIn(root, onAuth) {
+        root.innerHTML = "";
+        const wrap = el(
+          "div",
+          { className: "flex flex-col items-center px-6 py-8 text-center" },
+          el(
+            "div",
+            {
+              className:
+                "w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center mb-5 shadow-lg shadow-blue-500/30",
+            },
+            el("span", { className: "text-3xl" }, "🧹"),
+          ),
+          el(
+            "h2",
+            { className: "text-white font-bold text-xl mb-2" },
+            "Welcome to Declutter",
+          ),
+          el(
+            "p",
+            { className: "text-gray-400 text-sm mb-6 leading-relaxed" },
+            "Keep your Trello boards clean and healthy. Detect stale cards, track board health, and sweep old cards automatically.",
+          ),
+          el(
+            "button",
+            {
+              className:
+                "w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2",
+              onClick: async () => {
+                try {
+                  const token = await authorizeWithTrello();
+                  onAuth(token);
+                } catch (e) {
+                  console.error("Auth failed", e);
+                }
+              },
+            },
+            el("span", {}, "🔗"),
+            el("span", {}, "Sign in with Trello"),
+          ),
+          el(
+            "p",
+            { className: "text-gray-600 text-xs mt-4" },
+            "Authorize Declutter to read and manage your Trello boards.",
+          ),
+        );
+        root.appendChild(wrap);
+      }
+
+      // ── Dashboard view ────────────────────────────────────────────────────────
+      async function renderDashboard(root, token) {
+        root.innerHTML =
+          '<div class="flex items-center justify-center py-16"><div class="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div></div>';
+
+        let cards = [];
+        try {
+          const boards = await trelloFetch(
+            "/members/me/boards?filter=open&fields=id",
+            token,
+          );
+          const arrays = await Promise.all(
+            boards
+              .slice(0, 5)
+              .map((b) =>
+                trelloFetch(
+                  `/boards/${b.id}/cards/open?fields=id,name,dateLastActivity,idMembers`,
+                  token,
+                ),
+              ),
+          );
+          cards = arrays.flat();
+        } catch (e) {
+          console.error(e);
+        }
+
+        const staleThreshold = 30;
+        const stale = cards.filter(
+          (c) => daysSince(c.dateLastActivity) >= staleThreshold,
+        );
+        const atRisk = cards.filter((c) => {
+          const d = daysSince(c.dateLastActivity);
+          return d >= 21 && d < staleThreshold;
+        });
+        const unassigned = cards.filter((c) => !c.idMembers?.length);
+        const fresh = cards.filter((c) => daysSince(c.dateLastActivity) <= 7);
+        const health = Math.max(
+          0,
+          Math.round(100 - stale.length * 4 - atRisk.length * 1.5),
+        );
+
+        root.innerHTML = `
+        <div class="p-4 space-y-4 overflow-y-auto max-h-screen scrollbar-thin">
+          <!-- Health -->
+          <div class="bg-[#1C2333] rounded-xl p-4 border border-white/5">
+            <div class="flex items-center gap-3">
+              <div class="relative w-16 h-16 shrink-0">
+                <svg class="-rotate-90" width="64" height="64" viewBox="0 0 64 64">
+                  <circle cx="32" cy="32" r="26" fill="none" stroke="#ffffff10" stroke-width="7"/>
+                  <circle cx="32" cy="32" r="26" fill="none" stroke="${health >= 80 ? "#22c55e" : health >= 60 ? "#eab308" : "#ef4444"}"
+                    stroke-width="7" stroke-dasharray="${2 * Math.PI * 26}" stroke-dashoffset="${2 * Math.PI * 26 * (1 - health / 100)}"
+                    stroke-linecap="round"/>
+                </svg>
+                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                  <span class="text-white font-bold text-sm leading-none">${health}</span>
+                  <span class="text-gray-500 text-[8px]">/100</span>
+                </div>
+              </div>
+              <div class="flex-1">
+                <div class="text-white font-semibold text-sm">Board Health Score</div>
+                <div class="text-green-400 text-xs">${health >= 80 ? "✅ Good health" : health >= 60 ? "⚠️ Fair health" : "🔴 Needs attention"}</div>
+                <div class="text-gray-500 text-[10px] mt-0.5">Total: ${cards.length} cards</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stats -->
+          <div class="grid grid-cols-3 gap-2">
+            ${[
+              {
+                icon: "🔴",
+                label: "Stale",
+                count: stale.length,
+                color: "text-red-400",
+              },
+              {
+                icon: "⚠️",
+                label: "At Risk",
+                count: atRisk.length,
+                color: "text-yellow-400",
+              },
+              {
+                icon: "👤",
+                label: "Unassigned",
+                count: unassigned.length,
+                color: "text-purple-400",
+              },
+            ]
+              .map(
+                (s) => `
+              <div class="bg-[#1C2333] rounded-xl p-3 border border-white/5">
+                <div class="text-[10px] text-gray-500">${s.icon} ${s.label}</div>
+                <div class="${s.color} text-2xl font-bold">${s.count}</div>
+              </div>
+            `,
+              )
+              .join("")}
+          </div>
+
+          <!-- Aging Bars -->
+          <div class="bg-[#1C2333] rounded-xl p-4 border border-white/5">
+            <div class="text-white font-semibold text-sm mb-3">Aging Distribution</div>
+            <div class="space-y-2">
+              ${[
+                {
+                  label: "Fresh (0–7d)",
+                  color: "bg-green-500",
+                  count: fresh.length,
+                },
+                {
+                  label: "At Risk (21–29d)",
+                  color: "bg-orange-500",
+                  count: atRisk.length,
+                },
+                {
+                  label: "Stale (30+d)",
+                  color: "bg-red-500",
+                  count: stale.length,
+                },
+              ]
+                .map(
+                  (b) => `
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] text-gray-400 w-28">${b.label}</span>
+                  <div class="flex-1 h-1.5 bg-white/5 rounded-full"><div class="${b.color} h-full rounded-full" style="width:${Math.min(100, (b.count / Math.max(cards.length, 1)) * 100)}%"></div></div>
+                  <span class="text-[10px] text-gray-400 w-5 text-right">${b.count}</span>
+                </div>
+              `,
+                )
+                .join("")}
+            </div>
+          </div>
+
+          <!-- Sweep button -->
+          <button id="sweepBtn" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2 ${stale.length === 0 ? "opacity-50 cursor-not-allowed" : ""}">
+            🧹 Sweep ${stale.length} Stale Card${stale.length !== 1 ? "s" : ""}
+          </button>
+          <p class="text-center text-gray-600 text-[10px] -mt-2">Cards processed based on sweep rules.</p>
+
+          <!-- Quick actions -->
+          <div class="grid grid-cols-2 gap-2 pb-2">
+            ${[
+              "View Stale Cards",
+              "View At Risk Cards",
+              "View Unassigned",
+              "Cleanup Summary",
+            ]
+              .map(
+                (label) => `
+              <button class="bg-[#1C2333] hover:bg-[#252D3E] border border-white/5 rounded-xl p-3 text-left text-[10px] text-gray-300 transition-colors">
+                ${label} →
+              </button>
+            `,
+              )
+              .join("")}
+          </div>
+        </div>
+      `;
+
+        document
+          .getElementById("sweepBtn")
+          ?.addEventListener("click", async () => {
+            if (stale.length === 0) return;
+            alert(
+              `Sweeping ${stale.length} stale cards… (implement your sweep logic here)`,
+            );
+          });
+      }
+
+      // ── Bootstrap ─────────────────────────────────────────────────────────────
+      (async () => {
+        const root = document.getElementById("root");
+        let token;
+        try {
+          token = await getToken();
+        } catch {}
+
+        if (token) {
+          await renderDashboard(root, token);
+        } else {
+          renderSignIn(root, async (newToken) => {
+            await renderDashboard(root, newToken);
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+    <script>
+      var t = TrelloPowerUp.iframe();
+
+      // The connector registers Power-Up capabilities with Trello
+      TrelloPowerUp.initialize({
+        // 'board-buttons' adds an icon button to the Trello board header
+        "board-buttons": function (t, options) {
+          return [
+            {
+              icon: {
+                dark: window.location.origin + "/images/icon-dark.svg",
+                light: window.location.origin + "/images/icon-dark.svg",
+              },
+              text: "Declutter",
+              condition: "always",
+              callback: function (t) {
+                // Open the popup iframe when the button is clicked
+                return t.popup({
+                  title: "Declutter – Stale Card Manager",
+                  url: "./popup.html",
+                  height: 680,
+                });
+              },
+            },
+          ];
+        },
+      });
+    </script>
+  </head>
+  <body></body>
+</html>

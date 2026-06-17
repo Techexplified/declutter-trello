@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Handle -->
+  <path d="M8 4L18 14" />
+
+  <!-- Broom head -->
+  <path d="M16 12L21 17" />
+  <path d="M14 14L19 19" />
+  <path d="M12 16L17 21" />
+
+  <!-- Binding -->
+  <path d="M10.5 10.5L14 7" />
+</svg>
