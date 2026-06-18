@@ -1,0 +1,16 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+  </head>
+  <body>
+    <script>
+      const tokenMatch = window.location.hash.match(/token=([^&]+)/);
+
+      if (tokenMatch) {
+        TrelloPowerUp.authorize(tokenMatch[1]);
+      }
+    </script>
+  </body>
+</html>
