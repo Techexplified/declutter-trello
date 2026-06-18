@@ -47,12 +47,11 @@
         return t
           .authorize(
             `https://trello.com/1/authorize?` +
-              `expiration=never&name=Declutter&scope=read,write` +
-              `&response_type=token&key=${TRELLO_APP_KEY}` +
-              `&return_url=${encodeURIComponent(
-                window.location.origin + "/auth.html",
-              )}` +
-              `&callback_method=postMessage`,
+              `expiration=never` +
+              `&name=Declutter` +
+              `&scope=read,write` +
+              `&response_type=token` +
+              `&key=${TRELLO_APP_KEY}`,
             {
               height: 680,
               width: 580,
