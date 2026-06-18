@@ -1,9 +1,26 @@
-import { useState, useEffect } from "react";
+import { createElement, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  Archive,
+  ArrowRight,
+  BarChart3,
+  Brush,
+  CheckCircle2,
+  CircleAlert,
+  Clock3,
+  HelpCircle,
+  Info,
+  ListTodo,
+  RefreshCw,
+  RotateCw,
+  Sparkles,
+  Tag,
+  UserRound,
+  X,
+} from "lucide-react";
 
 const TRELLO_APP_KEY =
   import.meta.env.VITE_TRELLO_APP_KEY || "YOUR_TRELLO_APP_KEY";
-
-// ── helpers ────────────────────────────────────────────────────────────────────
 
 function trelloFetch(path, token) {
   const base = "https://api.trello.com/1";
@@ -24,22 +41,20 @@ function computeHealth(cards) {
     const d = daysSince(c.dateLastActivity);
     return d >= 21 && d < 30;
   }).length;
-  const score = Math.max(0, 100 - stale * 4 - atRisk * 1.5);
-  return Math.round(score);
+  return Math.max(0, Math.round(100 - stale * 4 - atRisk * 1.5));
 }
-
-// ── sub-components ─────────────────────────────────────────────────────────────
 
 function CircleProgress({
   value,
   max = 100,
-  size = 80,
-  stroke = 8,
+  size = 104,
+  stroke = 10,
   color = "#22c55e",
 }) {
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
   const offset = circ - (value / max) * circ;
+
   return (
     <svg
       width={size}
@@ -52,7 +67,7 @@ function CircleProgress({
         cy={size / 2}
         r={r}
         fill="none"
-        stroke="#ffffff10"
+        stroke="#ffffff12"
         strokeWidth={stroke}
       />
       <circle
@@ -71,22 +86,77 @@ function CircleProgress({
   );
 }
 
-function StatCard({ icon, label, count, sub, color, onView }) {
+function DonutTotal({ fresh, aging, atRisk, stale, total }) {
+  const segments = [
+    { value: fresh, color: "#22c55e" },
+    { value: aging, color: "#facc15" },
+    { value: atRisk, color: "#f97316" },
+    { value: stale, color: "#ef4444" },
+  ];
+  let offset = 25;
+
   return (
-    <div
-      className={`bg-[#1C2333] rounded-xl p-4 border border-white/5 flex flex-col gap-1`}
-    >
-      <div className="flex items-center gap-1.5 text-xs text-gray-400">
-        <span>{icon}</span>
-        <span>{label}</span>
+    <div className="relative h-28 w-28 shrink-0">
+      <svg className="-rotate-90" viewBox="0 0 42 42">
+        <circle
+          cx="21"
+          cy="21"
+          r="15.915"
+          fill="transparent"
+          stroke="#ffffff10"
+          strokeWidth="7"
+        />
+        {segments.map((segment, index) => {
+          const dash = total ? (segment.value / total) * 100 : 0;
+          const circle = (
+            <circle
+              key={index}
+              cx="21"
+              cy="21"
+              r="15.915"
+              fill="transparent"
+              stroke={segment.color}
+              strokeWidth="7"
+              strokeDasharray={`${dash} ${100 - dash}`}
+              strokeDashoffset={offset}
+            />
+          );
+          offset -= dash;
+          return circle;
+        })}
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-2xl font-bold leading-none text-white">
+          {total}
+        </span>
+        <span className="text-[11px] text-slate-300">Total Cards</span>
       </div>
-      <div className={`text-2xl font-bold ${color}`}>{count}</div>
-      <div className="text-[10px] text-gray-500">{sub}</div>
+    </div>
+  );
+}
+
+function StatCard({ icon: Icon, label, count, sub, color, border }) {
+  return (
+    <div className="rounded-lg border border-white/10 bg-[#0f1724] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+      <div className="flex items-center gap-2 text-sm font-medium text-white">
+        <span
+          className="flex h-6 w-6 items-center justify-center rounded-full"
+          style={{ backgroundColor: `${color}22`, color }}
+        >
+          {createElement(Icon, { size: 17 })}
+        </span>
+        {label}
+      </div>
+      <div className="mt-2 text-3xl font-bold leading-none" style={{ color }}>
+        {count}
+      </div>
+      <div className="mt-1 text-xs text-slate-300">{sub}</div>
       <button
-        onClick={onView}
-        className={`mt-1 text-[10px] border ${color === "text-red-400" ? "border-red-500/40 text-red-400 hover:bg-red-500/10" : color === "text-yellow-400" ? "border-yellow-500/40 text-yellow-400 hover:bg-yellow-500/10" : "border-purple-500/40 text-purple-400 hover:bg-purple-500/10"} rounded-lg py-1 transition-colors`}
+        type="button"
+        className="mt-3 flex h-7 w-full items-center justify-center gap-2 rounded-md border bg-transparent text-xs font-medium transition hover:bg-white/5"
+        style={{ borderColor: border, color }}
       >
-        View All →
+        View All <ArrowRight size={13} />
       </button>
     </div>
   );
@@ -94,55 +164,106 @@ function StatCard({ icon, label, count, sub, color, onView }) {
 
 function AgeBar({ label, color, count, max }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex items-center gap-1.5 w-32 shrink-0">
-        <div className={`w-2 h-2 rounded-full ${color}`} />
-        <span className="text-[11px] text-gray-400">{label}</span>
+    <div className="grid grid-cols-[150px_1fr_38px] items-center gap-3">
+      <div className="flex items-center gap-2 text-sm text-slate-300">
+        <span className="h-3 w-3 rounded-full" style={{ background: color }} />
+        {label}
       </div>
-      <div className="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+      <div className="h-2.5 overflow-hidden rounded-full bg-white/8">
         <div
-          className={`h-full rounded-full ${color}`}
+          className="h-full rounded-full"
           style={{
+            background: color,
             width: `${Math.min(100, (count / max) * 100)}%`,
             transition: "width 0.8s ease",
           }}
         />
       </div>
-      <span className="text-[11px] text-gray-400 w-6 text-right">{count}</span>
+      <div className="text-right text-sm tabular-nums text-slate-300">
+        {count}
+      </div>
     </div>
   );
 }
 
-// ── main ───────────────────────────────────────────────────────────────────────
+function SummaryItem({ icon: Icon, value, label, sub, color }) {
+  return (
+    <div className="flex flex-col items-center border-r border-white/10 px-4 text-center last:border-r-0">
+      <div className="flex items-center gap-2">
+        {createElement(Icon, { size: 24, style: { color } })}
+        <span className="text-2xl font-bold" style={{ color }}>
+          {value}
+        </span>
+      </div>
+      <div className="mt-1 text-sm text-white">{label}</div>
+      <div className="text-xs text-slate-400">{sub}</div>
+      <button
+        type="button"
+        className="mt-2 flex items-center gap-1 bg-transparent p-0 text-xs font-medium"
+        style={{ color }}
+      >
+        View All <ArrowRight size={13} />
+      </button>
+    </div>
+  );
+}
+
+function QuickAction({ icon: Icon, label, sub, color }) {
+  return (
+    <button
+      type="button"
+      className="flex min-h-12 items-center justify-between rounded-md border border-white/10 bg-[#111a28] px-3 text-left transition hover:border-white/20 hover:bg-[#162236]"
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        <span
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+          style={{ backgroundColor: `${color}20`, color }}
+        >
+          {createElement(Icon, { size: 15 })}
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-xs font-medium text-white">
+            {label}
+          </span>
+          <span className="block truncate text-[11px] text-slate-400">
+            {sub}
+          </span>
+        </span>
+      </span>
+      <ArrowRight className="shrink-0 text-slate-400" size={13} />
+    </button>
+  );
+}
 
 export default function DeclutterPopup({ onClose, token: propToken }) {
   const token = propToken || localStorage.getItem("trello_token") || "DEMO";
-
   const [loading, setLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState("just now");
+  const [lastUpdated, setLastUpdated] = useState("2 mins ago");
   const [healthScore, setHealthScore] = useState(84);
-  const [healthTrend] = useState(+6);
-  const [cards, setCards] = useState([]);
   const [staleRule, setStaleRule] = useState(30);
   const [sweepAction, setSweepAction] = useState("move");
   const [autoSweep, setAutoSweep] = useState(true);
   const [sweepFreq, setSweepFreq] = useState("Daily");
-  const [sweeping, setSweeping] = useState(false);
+  const [cards, setCards] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [sweeping, setSweeping] = useState(false);
 
-  // Demo data used when no real token or key
+  const demoCards = useMemo(
+    () =>
+      Array.from({ length: 245 }, (_, i) => ({
+        id: String(i),
+        name: `Card ${i}`,
+        dateLastActivity: new Date(
+          Date.now() - (i % 50) * 86_400_000,
+        ).toISOString(),
+        idMembers: i % 35 < 7 ? [] : ["member1"],
+      })),
+    [],
+  );
+
   const DEMO = token === "DEMO" || TRELLO_APP_KEY === "YOUR_TRELLO_APP_KEY";
 
-  const demoCards = Array.from({ length: 245 }, (_, i) => ({
-    id: String(i),
-    name: `Card ${i}`,
-    dateLastActivity: new Date(
-      Date.now() - (i % 50) * 86_400_000,
-    ).toISOString(),
-    idMembers: i % 8 === 0 ? [] : ["member1"],
-  }));
-
-  async function loadData(refetch = false) {
+  const loadData = useCallback(async (refetch = false) => {
     if (refetch) setRefreshing(true);
     else setLoading(true);
 
@@ -155,7 +276,7 @@ export default function DeclutterPopup({ onClose, token: propToken }) {
         );
         const cardArrays = await Promise.all(
           boards
-            .slice(0, 3)
+            .slice(0, 5)
             .map((b) =>
               trelloFetch(
                 `/boards/${b.id}/cards/open?fields=id,name,dateLastActivity,idMembers`,
@@ -171,14 +292,14 @@ export default function DeclutterPopup({ onClose, token: propToken }) {
 
     setCards(allCards);
     setHealthScore(computeHealth(allCards));
-    setLastUpdated("just now");
+    setLastUpdated(refetch ? "just now" : "2 mins ago");
     setLoading(false);
     setRefreshing(false);
-  }
+  }, [DEMO, demoCards, token]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const stale = cards.filter((c) => daysSince(c.dateLastActivity) >= staleRule);
   const atRisk = cards.filter((c) => {
@@ -191,437 +312,329 @@ export default function DeclutterPopup({ onClose, token: propToken }) {
     const d = daysSince(c.dateLastActivity);
     return d >= 8 && d <= 20;
   });
-
-  const maxAge = Math.max(
-    fresh.length,
-    aging.length,
-    atRisk.length,
-    stale.length,
-    1,
-  );
-
+  const maxAge = Math.max(fresh.length, aging.length, atRisk.length, stale.length, 1);
   const healthColor =
-    healthScore >= 80 ? "#22c55e" : healthScore >= 60 ? "#eab308" : "#ef4444";
+    healthScore >= 80 ? "#22c55e" : healthScore >= 60 ? "#facc15" : "#ef4444";
   const healthLabel =
     healthScore >= 80
-      ? "good health"
+      ? "Your board is in good health"
       : healthScore >= 60
-        ? "fair health"
-        : "poor health";
-  const healthEmoji =
-    healthScore >= 80 ? "✅" : healthScore >= 60 ? "⚠️" : "🔴";
+        ? "Your board needs attention"
+        : "Your board needs cleanup";
 
   async function handleSweep() {
     setSweeping(true);
-    await new Promise((r) => setTimeout(r, 1800)); // simulate API call
+    await new Promise((r) => setTimeout(r, 900));
     setSweeping(false);
     await loadData(true);
   }
 
   if (loading) {
     return (
-      <div className="w-[380px] bg-[#0D1117] rounded-2xl shadow-2xl border border-white/10 flex flex-col items-center justify-center py-16 gap-4">
-        <div className="w-8 h-8 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
-        <p className="text-gray-500 text-sm">Loading board data…</p>
+      <div className="flex h-[680px] w-[680px] items-center justify-center rounded-lg border border-white/10 bg-[#050a11] shadow-2xl">
+        <div className="h-9 w-9 animate-spin rounded-full border-2 border-blue-500/30 border-t-blue-500" />
       </div>
     );
   }
 
   return (
-    <div className="w-[380px] bg-[#0D1117] rounded-2xl shadow-2xl border border-white/10 overflow-hidden flex flex-col max-h-[90vh]">
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-blue-500 flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M3 6h18M3 12h12M3 18h8"
-                stroke="white"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-              />
-              <circle cx="19" cy="17" r="3" fill="#4ADE80" />
-            </svg>
+    <div className="max-h-[92vh] w-[min(680px,calc(100vw-24px))] overflow-hidden rounded-lg border border-white/10 bg-[#050a11] text-left text-slate-200 shadow-2xl">
+      <div className="flex items-center justify-between border-b border-white/8 px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+            <Brush size={22} />
           </div>
           <div>
-            <div className="text-white font-semibold text-sm leading-tight">
+            <div className="text-xl font-bold leading-5 text-white">
               Declutter
             </div>
-            <div className="text-gray-500 text-[10px]">
+            <div className="mt-1 text-xs text-slate-400">
               Stale Card Manager for Trello
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => loadData(true)}
-            className="text-gray-400 hover:text-white transition-colors text-xs flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/5"
-            disabled={refreshing}
+            className="flex items-center gap-2 rounded-md bg-transparent px-2 py-1 text-xs text-slate-300 hover:bg-white/5 hover:text-white"
           >
-            <span className={refreshing ? "animate-spin inline-block" : ""}>
-              ↻
-            </span>
-            <span>Refresh</span>
+            <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} />
+            Refresh
           </button>
+          <div className="h-6 w-px bg-white/10" />
           <button
+            type="button"
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-300 transition-colors w-6 h-6 flex items-center justify-center rounded-full hover:bg-white/10 text-sm"
+            className="rounded-md bg-transparent p-1 text-slate-400 hover:bg-white/5 hover:text-white"
+            aria-label="Close"
           >
-            ✕
+            <X size={20} />
           </button>
         </div>
       </div>
 
-      {/* ── Scrollable body ── */}
-      <div className="overflow-y-auto flex-1 px-4 py-4 space-y-4 scrollbar-thin">
-        {/* Board Health Score */}
-        <div className="bg-[#1C2333] rounded-xl p-4 border border-white/5">
-          <div className="flex items-center gap-4">
-            {/* Circle */}
-            <div className="relative shrink-0">
-              <CircleProgress value={healthScore} color={healthColor} />
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-white font-bold text-xl leading-none">
-                  {healthScore}
-                </span>
-                <span className="text-gray-500 text-[9px]">/100</span>
+      <div className="max-h-[calc(92vh-65px)] overflow-y-auto p-4 scrollbar-thin">
+        <div className="space-y-3">
+          <section className="rounded-lg border border-white/10 bg-[#0b1320] p-6">
+            <div className="grid grid-cols-[120px_1fr_170px] items-center gap-6">
+              <div className="relative h-[104px] w-[104px]">
+                <CircleProgress value={healthScore} color={healthColor} />
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-4xl font-bold leading-none" style={{ color: healthColor }}>
+                    {healthScore}
+                  </span>
+                  <span className="text-sm text-slate-300">/100</span>
+                </div>
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-white">
+                  Board Health Score
+                </h2>
+                <div className="mt-2 flex items-center gap-2 text-sm text-green-400">
+                  {healthLabel} <CheckCircle2 size={15} />
+                </div>
+                <div className="mt-7 text-xs text-slate-400">
+                  Last updated: {lastUpdated}
+                </div>
+              </div>
+              <div className="text-right">
+                <svg viewBox="0 0 150 70" className="h-20 w-full">
+                  <defs>
+                    <linearGradient id="sparkFill" x1="0" x2="0" y1="0" y2="1">
+                      <stop offset="0%" stopColor="#22c55e66" />
+                      <stop offset="100%" stopColor="#22c55e00" />
+                    </linearGradient>
+                  </defs>
+                  <path
+                    d="M12 48 L38 35 L64 42 L90 24 L114 36 L138 14 L138 64 L12 64 Z"
+                    fill="url(#sparkFill)"
+                  />
+                  <polyline
+                    points="12,48 38,35 64,42 90,24 114,36 138,14"
+                    fill="none"
+                    stroke="#22c55e"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="3"
+                  />
+                  {[12, 38, 64, 90, 114, 138].map((x, i) => {
+                    const y = [48, 35, 42, 24, 36, 14][i];
+                    return <circle key={x} cx={x} cy={y} r="4" fill="#22c55e" />;
+                  })}
+                </svg>
+                <div className="text-xs text-slate-300">
+                  Trend (7 days): <span className="text-green-400">↑ 6</span>
+                </div>
               </div>
             </div>
-            {/* Text */}
-            <div className="flex-1 min-w-0">
-              <div className="text-white font-semibold text-sm mb-1">
-                Board Health Score
-              </div>
-              <div className="text-green-400 text-xs mb-1">
-                {healthEmoji} Your board is in {healthLabel}
-              </div>
-              <div className="text-gray-500 text-[10px]">
-                Last updated: {lastUpdated}
-              </div>
-            </div>
-            {/* Trend sparkline (static SVG) */}
-            <div className="text-right shrink-0">
-              <svg width="56" height="28" viewBox="0 0 56 28">
-                <polyline
-                  points="0,22 10,18 20,20 30,14 40,10 56,6"
-                  fill="none"
-                  stroke="#22c55e"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                {[0, 10, 20, 30, 40, 56].map((x, i) => {
-                  const ys = [22, 18, 20, 14, 10, 6];
-                  return (
-                    <circle key={i} cx={x} cy={ys[i]} r="2.5" fill="#22c55e" />
-                  );
-                })}
-              </svg>
-              <div className="text-green-400 text-[10px] mt-1">
-                Trend (7d): ↑ {healthTrend}
-              </div>
-            </div>
-          </div>
-        </div>
+          </section>
 
-        {/* Stat cards row */}
-        <div className="grid grid-cols-3 gap-2">
-          <StatCard
-            icon="🔴"
-            label="Stale Cards"
-            count={stale.length}
-            sub="Need immediate action"
-            color="text-red-400"
-            onView={() => {}}
-          />
-          <StatCard
-            icon="⚠️"
-            label="At Risk Cards"
-            count={atRisk.length}
-            sub="May become stale soon"
-            color="text-yellow-400"
-            onView={() => {}}
-          />
-          <StatCard
-            icon="👤"
-            label="Unassigned"
-            count={unassigned.length}
-            sub="No members assigned"
-            color="text-purple-400"
-            onView={() => {}}
-          />
-        </div>
-
-        {/* Aging Distribution */}
-        <div className="bg-[#1C2333] rounded-xl p-4 border border-white/5">
-          <div className="text-white font-semibold text-sm mb-3">
-            Aging Distribution
+          <div className="grid grid-cols-3 gap-3">
+            <StatCard
+              icon={CircleAlert}
+              label="Stale Cards"
+              count={stale.length}
+              sub="Need immediate action"
+              color="#ef4444"
+              border="#ef444480"
+            />
+            <StatCard
+              icon={AlertTriangle}
+              label="At Risk Cards"
+              count={atRisk.length}
+              sub="May become stale soon"
+              color="#f59e0b"
+              border="#f59e0b80"
+            />
+            <StatCard
+              icon={UserRound}
+              label="Unassigned Cards"
+              count={unassigned.length}
+              sub="No members assigned"
+              color="#a855f7"
+              border="#a855f780"
+            />
           </div>
-          <div className="flex gap-4">
-            <div className="flex-1 space-y-2.5">
-              <AgeBar
-                label="Fresh (0–7d)"
-                color="bg-green-500"
-                count={fresh.length}
-                max={maxAge}
-              />
-              <AgeBar
-                label="Aging (8–20d)"
-                color="bg-yellow-400"
-                count={aging.length}
-                max={maxAge}
-              />
-              <AgeBar
-                label="At Risk (21–29d)"
-                color="bg-orange-500"
-                count={atRisk.length}
-                max={maxAge}
-              />
-              <AgeBar
-                label="Stale (30+d)"
-                color="bg-red-500"
-                count={stale.length}
-                max={maxAge}
+
+          <section className="rounded-lg border border-white/10 bg-[#0b1320] p-4">
+            <h2 className="mb-4 text-base font-bold text-white">
+              Aging Distribution
+            </h2>
+            <div className="flex items-center gap-7">
+              <div className="flex-1 space-y-4">
+                <AgeBar label="Fresh (0-7 days)" color="#22c55e" count={fresh.length} max={maxAge} />
+                <AgeBar label="Aging (8-20 days)" color="#facc15" count={aging.length} max={maxAge} />
+                <AgeBar label="At Risk (21-29 days)" color="#f97316" count={atRisk.length} max={maxAge} />
+                <AgeBar label="Stale (30+ days)" color="#ef4444" count={stale.length} max={maxAge} />
+              </div>
+              <DonutTotal
+                fresh={fresh.length}
+                aging={aging.length}
+                atRisk={atRisk.length}
+                stale={stale.length}
+                total={cards.length}
               />
             </div>
-            {/* Donut total */}
-            <div className="relative shrink-0 w-16 h-16">
-              <CircleProgress
-                value={fresh.length}
-                max={cards.length}
-                size={64}
-                stroke={7}
-                color="#22c55e"
-              />
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-white font-bold text-xs leading-none">
-                  {cards.length}
-                </span>
-                <span className="text-gray-500 text-[8px]">Total</span>
-              </div>
-            </div>
-          </div>
-        </div>
+          </section>
 
-        {/* Sweep Rules */}
-        <div className="bg-[#1C2333] rounded-xl p-4 border border-white/5">
-          <div className="text-white font-semibold text-sm mb-3">
-            Sweep Rules
-          </div>
-          <div className="flex gap-4">
-            {/* Left: days input */}
-            <div className="shrink-0">
-              <div className="text-gray-400 text-[10px] mb-2">
-                Days before stale
-              </div>
-              <div className="flex items-center gap-1 bg-[#0D1117] border border-white/10 rounded-lg px-2 py-1">
+          <section className="grid grid-cols-[1fr_1.15fr_1fr] rounded-lg border border-white/10 bg-[#0b1320] p-4">
+            <div className="border-r border-white/10 pr-5">
+              <h2 className="text-base font-bold text-white">Sweep Rules</h2>
+              <label className="mt-4 block text-xs text-slate-300">
+                Days before a card is considered stale
+              </label>
+              <div className="mt-3 flex items-center gap-3">
                 <input
                   type="number"
                   value={staleRule}
+                  min={1}
+                  max={365}
                   onChange={(e) =>
                     setStaleRule(Math.max(1, Number(e.target.value)))
                   }
-                  className="w-10 bg-transparent text-white text-sm font-semibold outline-none"
-                  min={1}
-                  max={365}
+                  className="h-9 w-24 rounded-md border border-white/10 bg-[#07101b] px-3 text-sm text-white outline-none focus:border-blue-500"
                 />
-                <span className="text-gray-500 text-[10px]">days</span>
+                <span className="text-sm text-slate-300">days</span>
               </div>
             </div>
-            {/* Middle: radio actions */}
-            <div className="flex-1">
-              <div className="text-gray-400 text-[10px] mb-2">
+
+            <div className="border-r border-white/10 px-5">
+              <div className="mb-3 text-xs text-slate-300">
                 When a card becomes stale
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {[
-                  { val: "move", label: "Move to Stale List" },
-                  { val: "archive", label: "Archive Card" },
-                  { val: "label", label: "Add Label" },
-                  { val: "moveto", label: "Move to Another List" },
-                ].map((opt) => (
+                  { val: "move", label: "Move to Stale List", icon: ListTodo },
+                  { val: "archive", label: "Archive Card", icon: Archive },
+                  { val: "label", label: "Add Label", icon: Tag },
+                  { val: "moveto", label: "Move to Another List", icon: ArrowRight },
+                ].map(({ val, label, icon: Icon }) => (
                   <label
-                    key={opt.val}
-                    className="flex items-center gap-2 cursor-pointer"
+                    key={val}
+                    className="flex cursor-pointer items-center gap-2 text-sm text-slate-200"
                   >
                     <input
                       type="radio"
                       name="sweepAction"
-                      value={opt.val}
-                      checked={sweepAction === opt.val}
-                      onChange={() => setSweepAction(opt.val)}
-                      className="accent-blue-500"
+                      value={val}
+                      checked={sweepAction === val}
+                      onChange={() => setSweepAction(val)}
+                      className="h-4 w-4 accent-blue-600"
                     />
-                    <span className="text-gray-300 text-[11px]">
-                      {opt.label}
-                    </span>
+                    {createElement(Icon, {
+                      size: 14,
+                      className: "text-slate-400",
+                    })}
+                    {label}
                   </label>
                 ))}
               </div>
             </div>
-            {/* Right: auto sweep */}
-            <div className="shrink-0 w-28">
-              <label className="flex items-center gap-2 mb-2 cursor-pointer">
+
+            <div className="pl-5">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-white">
                 <input
                   type="checkbox"
                   checked={autoSweep}
                   onChange={(e) => setAutoSweep(e.target.checked)}
-                  className="accent-blue-500 w-3.5 h-3.5"
+                  className="h-4 w-4 accent-blue-600"
                 />
-                <span className="text-blue-400 text-[10px] font-semibold">
-                  Auto Sweep Enabled
-                </span>
+                Auto Sweep Enabled
               </label>
-              <p className="text-gray-500 text-[9px] mb-3 leading-relaxed">
-                Automatically apply rule on schedule.
+              <p className="mt-2 text-xs leading-5 text-slate-400">
+                Automatically apply the rule on schedule.
               </p>
-              <div className="text-gray-400 text-[10px] mb-1">
+              <label className="mt-5 block text-xs text-slate-300">
                 Sweep Frequency
-              </div>
+              </label>
               <select
                 value={sweepFreq}
                 onChange={(e) => setSweepFreq(e.target.value)}
-                className="w-full bg-[#0D1117] border border-white/10 text-white text-[11px] rounded-lg px-2 py-1 outline-none"
+                className="mt-2 h-9 w-full rounded-md border border-white/10 bg-[#07101b] px-3 text-sm text-white outline-none focus:border-blue-500"
               >
                 {["Hourly", "Daily", "Weekly", "Monthly"].map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
+                  <option key={f}>{f}</option>
                 ))}
               </select>
             </div>
-          </div>
-        </div>
+          </section>
 
-        {/* Weekly Cleanup Summary */}
-        <div className="bg-[#1C2333] rounded-xl p-4 border border-white/5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-white font-semibold text-sm">
-              Weekly Cleanup Summary
-            </div>
-            <button className="text-blue-400 text-[10px] hover:text-blue-300 transition-colors">
-              View Full Summary →
-            </button>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              {
-                icon: "✅",
-                color: "text-green-400",
-                count: 8,
-                label: "Cards Swept",
-                sub: "Automatically moved",
-              },
-              {
-                icon: "🔄",
-                color: "text-blue-400",
-                count: 3,
-                label: "Cards Revived",
-                sub: "Stale cards made active",
-              },
-              {
-                icon: "🕐",
-                color: "text-orange-400",
-                count: 12,
-                label: "Became Stale",
-                sub: "Newly crossed threshold",
-              },
-            ].map((s, i) => (
-              <div key={i} className="flex flex-col items-center text-center">
-                <div className="flex items-center gap-1 mb-1">
-                  <span className="text-base">{s.icon}</span>
-                  <span className={`${s.color} font-bold text-lg`}>
-                    {s.count}
-                  </span>
-                </div>
-                <div className="text-white text-[10px] font-medium">
-                  {s.label}
-                </div>
-                <div className="text-gray-500 text-[9px]">{s.sub}</div>
-                <button
-                  className={`${s.color} text-[9px] mt-1 hover:underline`}
-                >
-                  View All →
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Sweep CTA */}
-        <button
-          onClick={handleSweep}
-          disabled={sweeping || stale.length === 0}
-          className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-        >
-          {sweeping ? (
-            <>
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              <span>Sweeping cards…</span>
-            </>
-          ) : (
-            <>
-              <span>🧹</span>
-              <span>
-                Sweep {stale.length} Stale Card{stale.length !== 1 ? "s" : ""}
-              </span>
-            </>
-          )}
-        </button>
-        <p className="text-center text-gray-600 text-[10px] -mt-2">
-          ℹ️ Stale cards will be processed based on the rule above.
-        </p>
-
-        {/* Quick Actions */}
-        <div className="pb-1">
-          <div className="text-white font-semibold text-xs mb-2">
-            Quick Actions
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { icon: "🔴", label: "View Stale Cards", count: stale.length },
-              { icon: "⚠️", label: "View At Risk Cards", count: atRisk.length },
-              {
-                icon: "👤",
-                label: "View Unassigned Cards",
-                count: unassigned.length,
-              },
-              {
-                icon: "📊",
-                label: "View Cleanup Summary",
-                count: null,
-                sub: "This week",
-              },
-            ].map((q, i) => (
+          <section className="rounded-lg border border-white/10 bg-[#0b1320] p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-bold text-white">
+                Weekly Cleanup Summary
+              </h2>
               <button
-                key={i}
-                className="bg-[#1C2333] hover:bg-[#252D3E] border border-white/5 rounded-xl p-3 text-left transition-colors flex items-center justify-between gap-2"
+                type="button"
+                className="flex items-center gap-2 rounded-md border border-blue-500/70 bg-transparent px-3 py-1.5 text-xs text-blue-400 hover:bg-blue-500/10"
               >
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">{q.icon}</span>
-                  <div>
-                    <div className="text-gray-300 text-[10px] font-medium leading-tight">
-                      {q.label}
-                    </div>
-                    <div className="text-gray-500 text-[9px]">
-                      {q.count !== null ? `${q.count} cards` : q.sub}
-                    </div>
-                  </div>
-                </div>
-                <span className="text-gray-600 text-xs">→</span>
+                View Full Summary <ArrowRight size={13} />
               </button>
-            ))}
-          </div>
+            </div>
+            <div className="grid grid-cols-3">
+              <SummaryItem
+                icon={CheckCircle2}
+                value={8}
+                label="Cards Swept"
+                sub="Automatically moved"
+                color="#22c55e"
+              />
+              <SummaryItem
+                icon={RotateCw}
+                value={3}
+                label="Cards Revived"
+                sub="Stale cards made active again"
+                color="#3b82f6"
+              />
+              <SummaryItem
+                icon={Clock3}
+                value={12}
+                label="Became Stale"
+                sub="Newly crossed stale threshold"
+                color="#f59e0b"
+              />
+            </div>
+          </section>
+
+          <button
+            type="button"
+            onClick={handleSweep}
+            disabled={sweeping || stale.length === 0}
+            className="flex h-11 w-full items-center justify-center gap-3 rounded-md bg-blue-600 text-base font-bold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {sweeping ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+            ) : (
+              <Brush size={18} />
+            )}
+            Sweep {stale.length} Stale Card{stale.length === 1 ? "" : "s"}
+          </button>
+          <p className="-mt-1 flex items-center justify-center gap-2 text-xs text-slate-500">
+            <Info size={14} /> Stale cards will be processed based on the rule above.
+          </p>
+
+          <section className="rounded-lg border border-white/10 bg-[#0b1320] p-4">
+            <h2 className="mb-3 text-sm font-bold text-white">Quick Actions</h2>
+            <div className="grid grid-cols-4 gap-3">
+              <QuickAction icon={CircleAlert} label="View Stale Cards" sub={`${stale.length} cards`} color="#ef4444" />
+              <QuickAction icon={AlertTriangle} label="View At Risk Cards" sub={`${atRisk.length} cards`} color="#f59e0b" />
+              <QuickAction icon={UserRound} label="View Unassigned Cards" sub={`${unassigned.length} cards`} color="#a855f7" />
+              <QuickAction icon={BarChart3} label="View Cleanup Summary" sub="This week" color="#3b82f6" />
+            </div>
+          </section>
         </div>
       </div>
 
-      {/* ── Footer ── */}
-      <div className="px-5 py-3 border-t border-white/5 flex items-center justify-between shrink-0">
-        <span className="text-gray-600 text-[10px]">
-          ✨ Powering cleaner, healthier boards
+      <div className="flex items-center justify-between border-t border-white/8 px-5 py-3 text-xs text-slate-400">
+        <span className="flex items-center gap-2">
+          <Sparkles size={14} /> Powering cleaner, healthier boards
         </span>
-        <button className="text-gray-600 hover:text-gray-400 text-[10px] transition-colors">
-          Need help? ⓘ
+        <button
+          type="button"
+          className="flex items-center gap-2 bg-transparent p-0 text-xs text-slate-400 hover:text-white"
+        >
+          Need help? <HelpCircle size={14} />
         </button>
       </div>
     </div>
