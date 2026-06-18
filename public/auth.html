@@ -6,10 +6,12 @@
   </head>
   <body>
     <script>
-      const tokenMatch = window.location.hash.match(/token=([^&]+)/);
+      const token = new URLSearchParams(window.location.hash.substring(1)).get(
+        "token",
+      );
 
-      if (tokenMatch) {
-        TrelloPowerUp.authorize(tokenMatch[1]);
+      if (token) {
+        TrelloPowerUp.authorize(token);
       }
     </script>
   </body>

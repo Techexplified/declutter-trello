@@ -51,14 +51,19 @@
               `&name=Declutter` +
               `&scope=read,write` +
               `&response_type=token` +
-              `&key=${TRELLO_APP_KEY}`,
+              `&key=${TRELLO_APP_KEY}` +
+              `&return_url=${encodeURIComponent(
+                `${window.location.origin}/auth.html`,
+              )}`,
             {
               height: 680,
               width: 580,
               validToken: (token) => token && token.length > 0,
             },
           )
-          .then((token) => saveToken(token).then(() => token));
+          .then((token) => {
+            return saveToken(token).then(() => token);
+          });
       }
 
       // ── Trello API helper ─────────────────────────────────────────────────────
