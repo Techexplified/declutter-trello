@@ -48,7 +48,9 @@
           .authorize(
             `https://trello.com/1/authorize?` +
               `expiration=never&name=Declutter&scope=read,write` +
-              `&response_type=token&key=${TRELLO_APP_KEY}`,
+              `&response_type=token&key=${TRELLO_APP_KEY}` +
+              `&return_url=${encodeURIComponent("https://declutter-trello.vercel.app/popup.html")}` +
+              `&callback_method=postMessage`,
             {
               height: 680,
               width: 580,
