@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+    <title>Authorizing...</title>
   </head>
   <body>
     <script>
@@ -10,8 +10,16 @@
         "token",
       );
 
-      if (token) {
-        TrelloPowerUp.authorize(token);
+      if (
+        token &&
+        window.opener &&
+        typeof window.opener.authorize === "function"
+      ) {
+        window.opener.authorize(token);
+        window.close();
+      } else {
+        document.body.innerHTML =
+          "<h3>Authorization failed</h3><p>Token or opener not found.</p>";
       }
     </script>
   </body>
