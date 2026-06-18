@@ -188,7 +188,7 @@ function AgeBar({ label, color, count, max }) {
 
 function SummaryItem({ icon: Icon, value, label, sub, color }) {
   return (
-    <div className="flex flex-col items-center border-r border-white/10 px-4 text-center last:border-r-0">
+    <div className="summary-item flex flex-col items-center border-r border-white/10 px-4 text-center last:border-r-0">
       <div className="flex items-center gap-2">
         {createElement(Icon, { size: 24, style: { color } })}
         <span className="text-2xl font-bold" style={{ color }}>
@@ -331,14 +331,14 @@ export default function DeclutterPopup({ onClose, token: propToken }) {
 
   if (loading) {
     return (
-      <div className="flex h-[680px] w-[680px] items-center justify-center rounded-lg border border-white/10 bg-[#050a11] shadow-2xl">
+      <div className="flex h-[680px] w-full max-w-[760px] items-center justify-center rounded-lg border border-white/10 bg-[#050a11] shadow-2xl">
         <div className="h-9 w-9 animate-spin rounded-full border-2 border-blue-500/30 border-t-blue-500" />
       </div>
     );
   }
 
   return (
-    <div className="max-h-[92vh] w-[min(680px,calc(100vw-24px))] overflow-hidden rounded-lg border border-white/10 bg-[#050a11] text-left text-slate-200 shadow-2xl">
+    <div className="max-h-[92vh] w-[min(760px,calc(100vw-24px))] overflow-hidden rounded-lg border border-white/10 bg-[#050a11] text-left text-slate-200 shadow-2xl">
       <div className="flex items-center justify-between border-b border-white/8 px-5 py-4">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-lg shadow-blue-600/20">
@@ -377,7 +377,7 @@ export default function DeclutterPopup({ onClose, token: propToken }) {
       <div className="max-h-[calc(92vh-65px)] overflow-y-auto p-4 scrollbar-thin">
         <div className="space-y-3">
           <section className="rounded-lg border border-white/10 bg-[#0b1320] p-6">
-            <div className="grid grid-cols-[120px_1fr_170px] items-center gap-6">
+            <div className="health-grid grid grid-cols-[120px_minmax(0,1fr)_170px] items-center gap-6">
               <div className="relative h-[104px] w-[104px]">
                 <CircleProgress value={healthScore} color={healthColor} />
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
@@ -430,7 +430,7 @@ export default function DeclutterPopup({ onClose, token: propToken }) {
             </div>
           </section>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="stats-grid grid grid-cols-3 gap-3">
             <StatCard
               icon={CircleAlert}
               label="Stale Cards"
@@ -461,7 +461,7 @@ export default function DeclutterPopup({ onClose, token: propToken }) {
             <h2 className="mb-4 text-base font-bold text-white">
               Aging Distribution
             </h2>
-            <div className="flex items-center gap-7">
+            <div className="aging-flex flex items-center gap-7">
               <div className="flex-1 space-y-4">
                 <AgeBar label="Fresh (0-7 days)" color="#22c55e" count={fresh.length} max={maxAge} />
                 <AgeBar label="Aging (8-20 days)" color="#facc15" count={aging.length} max={maxAge} />
@@ -478,8 +478,8 @@ export default function DeclutterPopup({ onClose, token: propToken }) {
             </div>
           </section>
 
-          <section className="grid grid-cols-[1fr_1.15fr_1fr] rounded-lg border border-white/10 bg-[#0b1320] p-4">
-            <div className="border-r border-white/10 pr-5">
+          <section className="rules-grid grid grid-cols-[1fr_1.15fr_1fr] rounded-lg border border-white/10 bg-[#0b1320] p-4">
+            <div className="rule-section border-r border-white/10 pr-5">
               <h2 className="text-base font-bold text-white">Sweep Rules</h2>
               <label className="mt-4 block text-xs text-slate-300">
                 Days before a card is considered stale
@@ -499,7 +499,7 @@ export default function DeclutterPopup({ onClose, token: propToken }) {
               </div>
             </div>
 
-            <div className="border-r border-white/10 px-5">
+            <div className="rule-section border-r border-white/10 px-5">
               <div className="mb-3 text-xs text-slate-300">
                 When a card becomes stale
               </div>
@@ -532,7 +532,7 @@ export default function DeclutterPopup({ onClose, token: propToken }) {
               </div>
             </div>
 
-            <div className="pl-5">
+            <div className="rule-section pl-5">
               <label className="flex cursor-pointer items-center gap-2 text-sm text-white">
                 <input
                   type="checkbox"
@@ -572,7 +572,7 @@ export default function DeclutterPopup({ onClose, token: propToken }) {
                 View Full Summary <ArrowRight size={13} />
               </button>
             </div>
-            <div className="grid grid-cols-3">
+            <div className="summary-grid grid grid-cols-3">
               <SummaryItem
                 icon={CheckCircle2}
                 value={8}
@@ -616,7 +616,7 @@ export default function DeclutterPopup({ onClose, token: propToken }) {
 
           <section className="rounded-lg border border-white/10 bg-[#0b1320] p-4">
             <h2 className="mb-3 text-sm font-bold text-white">Quick Actions</h2>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="quick-grid grid grid-cols-4 gap-3">
               <QuickAction icon={CircleAlert} label="View Stale Cards" sub={`${stale.length} cards`} color="#ef4444" />
               <QuickAction icon={AlertTriangle} label="View At Risk Cards" sub={`${atRisk.length} cards`} color="#f59e0b" />
               <QuickAction icon={UserRound} label="View Unassigned Cards" sub={`${unassigned.length} cards`} color="#a855f7" />

@@ -10,11 +10,27 @@
       html,
       body {
         margin: 0;
-        min-width: 680px;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: hidden;
         background: #050a11;
         color: #e2e8f0;
         font-family: Inter, ui-sans-serif, system-ui, -apple-system,
           BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      #root {
+        width: 100%;
+      }
+
+      .declutter-shell {
+        width: 100%;
+        max-width: 760px;
+        margin: 0 auto;
       }
 
       button,
@@ -34,6 +50,46 @@
       .scrollbar-thin::-webkit-scrollbar-thumb {
         background: #ffffff22;
         border-radius: 999px;
+      }
+
+      @media (max-width: 640px) {
+        .health-grid,
+        .stats-grid,
+        .rules-grid,
+        .summary-grid,
+        .quick-grid {
+          grid-template-columns: minmax(0, 1fr) !important;
+        }
+
+        .aging-flex {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .rule-section {
+          border-right: 0 !important;
+          border-bottom: 1px solid rgb(255 255 255 / 0.1);
+          padding: 0 0 16px 0 !important;
+        }
+
+        .rule-section + .rule-section {
+          padding-top: 16px !important;
+        }
+
+        .rule-section:last-child {
+          border-bottom: 0;
+          padding-bottom: 0 !important;
+        }
+
+        .summary-item {
+          border-right: 0 !important;
+          border-bottom: 1px solid rgb(255 255 255 / 0.1);
+          padding: 14px 0;
+        }
+
+        .summary-item:last-child {
+          border-bottom: 0;
+        }
       }
     </style>
   </head>
@@ -233,7 +289,7 @@
         const maxAge = Math.max(fresh.length, aging.length, atRisk.length, stale.length, 1);
 
         root.innerHTML = `
-          <div class="h-screen max-h-[680px] overflow-hidden rounded-lg border border-white/10 bg-[#050a11] text-left shadow-2xl">
+          <div class="declutter-shell h-screen max-h-[680px] overflow-hidden rounded-lg border border-white/10 bg-[#050a11] text-left shadow-2xl">
             <div class="flex items-center justify-between border-b border-white/10 px-5 py-4">
               <div class="flex items-center gap-3">
                 <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">${icon("brush", 22)}</div>
@@ -252,7 +308,7 @@
             <div class="max-h-[615px] overflow-y-auto p-4 scrollbar-thin">
               <div class="space-y-3">
                 <section class="rounded-lg border border-white/10 bg-[#0b1320] p-6">
-                  <div class="grid grid-cols-[120px_1fr_170px] items-center gap-6">
+                  <div class="health-grid grid grid-cols-[120px_minmax(0,1fr)_170px] items-center gap-6">
                     <div class="relative h-[104px] w-[104px]">
                       ${circle(health, healthColor)}
                       <div class="absolute inset-0 flex flex-col items-center justify-center">
@@ -277,7 +333,7 @@
                   </div>
                 </section>
 
-                <div class="grid grid-cols-3 gap-3">
+                <div class="stats-grid grid grid-cols-3 gap-3">
                   ${statCard({ iconName: "circleAlert", label: "Stale Cards", count: stale.length, sub: "Need immediate action", color: "#ef4444" })}
                   ${statCard({ iconName: "alert", label: "At Risk Cards", count: atRisk.length, sub: "May become stale soon", color: "#f59e0b" })}
                   ${statCard({ iconName: "user", label: "Unassigned Cards", count: unassigned.length, sub: "No members assigned", color: "#a855f7" })}
@@ -285,7 +341,7 @@
 
                 <section class="rounded-lg border border-white/10 bg-[#0b1320] p-4">
                   <h2 class="mb-4 text-base font-bold text-white">Aging Distribution</h2>
-                  <div class="flex items-center gap-7">
+                  <div class="aging-flex flex items-center gap-7">
                     <div class="flex-1 space-y-4">
                       ${ageBar("Fresh (0-7 days)", "#22c55e", fresh.length, maxAge)}
                       ${ageBar("Aging (8-20 days)", "#facc15", aging.length, maxAge)}
@@ -296,19 +352,19 @@
                   </div>
                 </section>
 
-                <section class="grid grid-cols-[1fr_1.15fr_1fr] rounded-lg border border-white/10 bg-[#0b1320] p-4">
-                  <div class="border-r border-white/10 pr-5">
+                <section class="rules-grid grid grid-cols-[1fr_1.15fr_1fr] rounded-lg border border-white/10 bg-[#0b1320] p-4">
+                  <div class="rule-section border-r border-white/10 pr-5">
                     <h2 class="text-base font-bold text-white">Sweep Rules</h2>
                     <label class="mt-4 block text-xs text-slate-300">Days before a card is considered stale</label>
                     <div class="mt-3 flex items-center gap-3"><input type="number" value="${threshold}" min="1" max="365" class="h-9 w-24 rounded-md border border-white/10 bg-[#07101b] px-3 text-sm text-white outline-none"><span class="text-sm text-slate-300">days</span></div>
                   </div>
-                  <div class="border-r border-white/10 px-5">
+                  <div class="rule-section border-r border-white/10 px-5">
                     <div class="mb-3 text-xs text-slate-300">When a card becomes stale</div>
                     <div class="space-y-2">
                       ${["Move to Stale List", "Archive Card", "Add Label", "Move to Another List"].map((label, i) => `<label class="flex cursor-pointer items-center gap-2 text-sm text-slate-200"><input type="radio" name="sweepAction" class="h-4 w-4 accent-blue-600" ${i === 0 ? "checked" : ""}>${label}</label>`).join("")}
                     </div>
                   </div>
-                  <div class="pl-5">
+                  <div class="rule-section pl-5">
                     <label class="flex cursor-pointer items-center gap-2 text-sm text-white"><input type="checkbox" checked class="h-4 w-4 accent-blue-600">Auto Sweep Enabled</label>
                     <p class="mt-2 text-xs leading-5 text-slate-400">Automatically apply the rule on schedule.</p>
                     <label class="mt-5 block text-xs text-slate-300">Sweep Frequency</label>
@@ -321,10 +377,10 @@
                     <h2 class="text-base font-bold text-white">Weekly Cleanup Summary</h2>
                     <button class="flex items-center gap-2 rounded-md border border-blue-500/70 bg-transparent px-3 py-1.5 text-xs text-blue-400 hover:bg-blue-500/10">View Full Summary ${icon("arrow", 13)}</button>
                   </div>
-                  <div class="grid grid-cols-3">
-                    <div class="flex flex-col items-center border-r border-white/10 px-4 text-center"><div class="flex items-center gap-2 text-green-500">${icon("check", 24)}<span class="text-2xl font-bold">8</span></div><div class="mt-1 text-sm text-white">Cards Swept</div><div class="text-xs text-slate-400">Automatically moved</div><button class="mt-2 flex items-center gap-1 bg-transparent p-0 text-xs font-medium text-green-500">View All ${icon("arrow", 13)}</button></div>
-                    <div class="flex flex-col items-center border-r border-white/10 px-4 text-center"><div class="flex items-center gap-2 text-blue-500">${icon("rotate", 24)}<span class="text-2xl font-bold">3</span></div><div class="mt-1 text-sm text-white">Cards Revived</div><div class="text-xs text-slate-400">Stale cards made active again</div><button class="mt-2 flex items-center gap-1 bg-transparent p-0 text-xs font-medium text-blue-500">View All ${icon("arrow", 13)}</button></div>
-                    <div class="flex flex-col items-center px-4 text-center"><div class="flex items-center gap-2 text-amber-500">${icon("clock", 24)}<span class="text-2xl font-bold">12</span></div><div class="mt-1 text-sm text-white">Became Stale</div><div class="text-xs text-slate-400">Newly crossed stale threshold</div><button class="mt-2 flex items-center gap-1 bg-transparent p-0 text-xs font-medium text-amber-500">View All ${icon("arrow", 13)}</button></div>
+                  <div class="summary-grid grid grid-cols-3">
+                    <div class="summary-item flex flex-col items-center border-r border-white/10 px-4 text-center"><div class="flex items-center gap-2 text-green-500">${icon("check", 24)}<span class="text-2xl font-bold">8</span></div><div class="mt-1 text-sm text-white">Cards Swept</div><div class="text-xs text-slate-400">Automatically moved</div><button class="mt-2 flex items-center gap-1 bg-transparent p-0 text-xs font-medium text-green-500">View All ${icon("arrow", 13)}</button></div>
+                    <div class="summary-item flex flex-col items-center border-r border-white/10 px-4 text-center"><div class="flex items-center gap-2 text-blue-500">${icon("rotate", 24)}<span class="text-2xl font-bold">3</span></div><div class="mt-1 text-sm text-white">Cards Revived</div><div class="text-xs text-slate-400">Stale cards made active again</div><button class="mt-2 flex items-center gap-1 bg-transparent p-0 text-xs font-medium text-blue-500">View All ${icon("arrow", 13)}</button></div>
+                    <div class="summary-item flex flex-col items-center px-4 text-center"><div class="flex items-center gap-2 text-amber-500">${icon("clock", 24)}<span class="text-2xl font-bold">12</span></div><div class="mt-1 text-sm text-white">Became Stale</div><div class="text-xs text-slate-400">Newly crossed stale threshold</div><button class="mt-2 flex items-center gap-1 bg-transparent p-0 text-xs font-medium text-amber-500">View All ${icon("arrow", 13)}</button></div>
                   </div>
                 </section>
 
@@ -333,7 +389,7 @@
 
                 <section class="rounded-lg border border-white/10 bg-[#0b1320] p-4">
                   <h2 class="mb-3 text-sm font-bold text-white">Quick Actions</h2>
-                  <div class="grid grid-cols-4 gap-3">
+                  <div class="quick-grid grid grid-cols-4 gap-3">
                     ${[
                       ["circleAlert", "View Stale Cards", `${stale.length} cards`, "#ef4444"],
                       ["alert", "View At Risk Cards", `${atRisk.length} cards`, "#f59e0b"],
@@ -354,7 +410,10 @@
             </div>
           </div>`;
 
-        document.getElementById("close")?.addEventListener("click", () => t.closePopup());
+        document.getElementById("close")?.addEventListener("click", () => {
+          if (typeof t.closeModal === "function") t.closeModal();
+          else t.closePopup();
+        });
         document.getElementById("refresh")?.addEventListener("click", () => renderDashboard(root, token));
         document.getElementById("sweep")?.addEventListener("click", () => {
           alert(`Sweeping ${stale.length} stale cards...`);

@@ -50,3 +50,43 @@ button:disabled {
   background: #ffffff22;
   border-radius: 999px;
 }
+
+@media (max-width: 640px) {
+  .health-grid,
+  .stats-grid,
+  .rules-grid,
+  .summary-grid,
+  .quick-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .aging-flex {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rule-section {
+    border-right: 0 !important;
+    border-bottom: 1px solid rgb(255 255 255 / 0.1);
+    padding: 0 0 16px 0 !important;
+  }
+
+  .rule-section + .rule-section {
+    padding-top: 16px !important;
+  }
+
+  .rule-section:last-child {
+    border-bottom: 0;
+    padding-bottom: 0 !important;
+  }
+
+  .summary-item {
+    border-right: 0 !important;
+    border-bottom: 1px solid rgb(255 255 255 / 0.1);
+    padding: 14px 0;
+  }
+
+  .summary-item:last-child {
+    border-bottom: 0;
+  }
+}

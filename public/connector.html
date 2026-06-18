@@ -20,11 +20,19 @@
               text: "Declutter",
               condition: "always",
               callback: function (t) {
+                if (typeof t.modal === "function") {
+                  return t.modal({
+                    title: "Declutter \u2013 Stale Card Manager",
+                    url: BASE_URL + "/popup.html",
+                    height: 680,
+                    fullscreen: false,
+                  });
+                }
+
                 return t.popup({
                   title: "Declutter \u2013 Stale Card Manager",
                   url: BASE_URL + "/popup.html",
                   height: 680,
-                  width: 700,
                 });
               },
             },
