@@ -331,14 +331,14 @@ export default function DeclutterPopup({ onClose, token: propToken }) {
 
   if (loading) {
     return (
-      <div className="flex h-[680px] w-full max-w-[760px] items-center justify-center rounded-lg border border-white/10 bg-[#050a11] shadow-2xl">
+      <div className="flex h-[min(620px,calc(100vh-32px))] w-full max-w-[760px] items-center justify-center rounded-lg border border-white/10 bg-[#050a11] shadow-2xl">
         <div className="h-9 w-9 animate-spin rounded-full border-2 border-blue-500/30 border-t-blue-500" />
       </div>
     );
   }
 
   return (
-    <div className="max-h-[92vh] w-[min(760px,calc(100vw-24px))] overflow-hidden rounded-lg border border-white/10 bg-[#050a11] text-left text-slate-200 shadow-2xl">
+    <div className="max-h-[min(620px,calc(100vh-32px))] w-[min(760px,calc(100vw-24px))] overflow-hidden rounded-lg border border-white/10 bg-[#050a11] text-left text-slate-200 shadow-2xl">
       <div className="flex items-center justify-between border-b border-white/8 px-5 py-4">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white shadow-lg shadow-blue-600/20">
@@ -374,7 +374,7 @@ export default function DeclutterPopup({ onClose, token: propToken }) {
         </div>
       </div>
 
-      <div className="max-h-[calc(92vh-65px)] overflow-y-auto p-4 scrollbar-thin">
+      <div className="h-[calc(min(620px,calc(100vh-32px))-65px)] overflow-y-auto p-4 scrollbar-thin">
         <div className="space-y-3">
           <section className="rounded-lg border border-white/10 bg-[#0b1320] p-6">
             <div className="health-grid grid grid-cols-[120px_minmax(0,1fr)_170px] items-center gap-6">
