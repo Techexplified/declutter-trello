@@ -417,6 +417,7 @@
         // ── 1. Fetch current board's lists + cards ──────────────────────────────
         const threshold = 30; // days; could later be made configurable via t.get
         let cards = [];
+        let allCards = [];
         let boardName = "Your Board";
         let fetchError = null;
 
@@ -438,7 +439,7 @@
           );
 
           // Fetch all open (non-archived) cards on the board
-          const allCards = await trelloFetch(
+          allCards = await trelloFetch(
             `/boards/${boardId}/cards/open?fields=id,name,dateLastActivity,idMembers,idList`,
             token,
           );
