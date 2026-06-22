@@ -370,6 +370,9 @@
               token,
             );
 
+            console.log("TOKEN:", token);
+            console.log("BOARDS:", boards);
+
             const boardData = await Promise.all(
               boards.slice(0, 5).map(async (board) => {
                 const [cards, lists] = await Promise.all([
@@ -397,6 +400,9 @@
             );
 
             cards = boardData.flat();
+
+            console.log("REAL CARDS:", cards.length);
+            console.log(cards.slice(0, 5));
           }
         } catch (e) {
           console.error(e);
