@@ -16,8 +16,14 @@
         overflow: hidden;
         background: #050a11;
         color: #e2e8f0;
-        font-family: Inter, ui-sans-serif, system-ui, -apple-system,
-          BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
       }
 
       * {
@@ -102,6 +108,10 @@
       const t = TrelloPowerUp.iframe();
       const TRELLO_APP_KEY = "2082693e62994dce1c1cba5f43e4711b";
 
+      const STALE_THRESHOLD = 30;
+
+      const DONE_LIST_NAMES = ["done", "completed", "closed", "finished"];
+
       function getToken() {
         return t.get("member", "private", "token");
       }
@@ -138,21 +148,103 @@
         );
       }
 
-      function computeHealth(cards) {
-        if (!cards.length) return 100;
-        const stale = cards.filter((c) => daysSince(c.dateLastActivity) >= 30);
-        const atRisk = cards.filter((c) => {
-          const d = daysSince(c.dateLastActivity);
-          return d >= 21 && d < 30;
+      function isDoneList(listName = "") {
+        const name = listName.toLowerCase().trim();
+
+        return DONE_LIST_NAMES.some((doneName) => name.includes(doneName));
+      }
+
+      function getInactiveDays(card) {
+        return daysSince(card.dateLastActivity);
+      }
+
+      function getStaleCards(cards) {
+        return cards.filter(
+          (card) => !card.closed && getInactiveDays(card) >= STALE_THRESHOLD,
+        );
+      }
+
+      function getAtRiskCards(cards) {
+        return cards.filter((card) => {
+          if (card.closed) return false;
+
+          const days = getInactiveDays(card);
+
+          return (
+            days >= Math.floor(STALE_THRESHOLD * 0.7) && days < STALE_THRESHOLD
+          );
         });
-        return Math.max(0, Math.round(100 - stale.length * 4 - atRisk.length * 1.5));
+      }
+
+      function getUnassignedCards(cards) {
+        return cards.filter((card) => {
+          if (card.closed) return false;
+
+          if (isDoneList(card.listName)) return false;
+
+          return !card.idMembers?.length;
+        });
+      }
+
+      function computeHealthScore(
+        totalCards,
+        staleCount,
+        atRiskCount,
+        unassignedCount,
+      ) {
+        if (totalCards === 0) return 100;
+
+        const issues = staleCount + atRiskCount + unassignedCount;
+
+        return Math.max(
+          0,
+          Math.round(((totalCards - issues) / totalCards) * 100),
+        );
+      }
+
+      function getHealthCategory(score) {
+        if (score >= 90)
+          return {
+            label: "Excellent",
+            color: "#22c55e",
+            message: "Board is performing exceptionally well",
+          };
+
+        if (score >= 75)
+          return {
+            label: "Healthy",
+            color: "#84cc16",
+            message: "Board is in good health",
+          };
+
+        if (score >= 60)
+          return {
+            label: "Needs Attention",
+            color: "#facc15",
+            message: "Some cleanup is recommended",
+          };
+
+        if (score >= 40)
+          return {
+            label: "Poor",
+            color: "#f97316",
+            message: "Board requires cleanup",
+          };
+
+        return {
+          label: "Critical",
+          color: "#ef4444",
+          message: "Immediate action needed",
+        };
       }
 
       function demoCards() {
         return Array.from({ length: 245 }, (_, i) => ({
           id: String(i),
           name: `Card ${i}`,
-          dateLastActivity: new Date(Date.now() - (i % 50) * 86_400_000).toISOString(),
+          dateLastActivity: new Date(
+            Date.now() - (i % 50) * 86_400_000,
+          ).toISOString(),
           idMembers: i % 35 < 7 ? [] : ["member1"],
         }));
       }
@@ -170,20 +262,29 @@
       function icon(name, size = 16, className = "") {
         const attrs = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${className}"`;
         const paths = {
-          brush: '<path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 0 1 4.03 4.03L13.1 15.94"></path><path d="M7.07 14A3.99 3.99 0 0 0 3 18c0 1 0 3-2 3 0 0 4 0 6-2a3.99 3.99 0 0 0 .07-5Z"></path>',
-          refresh: '<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><path d="M16 16h5v5"></path>',
+          brush:
+            '<path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 0 1 4.03 4.03L13.1 15.94"></path><path d="M7.07 14A3.99 3.99 0 0 0 3 18c0 1 0 3-2 3 0 0 4 0 6-2a3.99 3.99 0 0 0 .07-5Z"></path>',
+          refresh:
+            '<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><path d="M16 16h5v5"></path>',
           x: '<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>',
-          check: '<path d="M9 12l2 2 4-4"></path><circle cx="12" cy="12" r="10"></circle>',
-          alert: '<path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"></path>',
-          circleAlert: '<circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path>',
+          check:
+            '<path d="M9 12l2 2 4-4"></path><circle cx="12" cy="12" r="10"></circle>',
+          alert:
+            '<path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"></path>',
+          circleAlert:
+            '<circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path>',
           user: '<path d="M18 20a6 6 0 0 0-12 0"></path><circle cx="12" cy="10" r="4"></circle>',
           arrow: '<path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path>',
           info: '<circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path>',
-          spark: '<path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3Z"></path><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z"></path>',
+          spark:
+            '<path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3Z"></path><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z"></path>',
           help: '<circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 1 1 5.82 1c0 2-3 2-3 4"></path><path d="M12 17h.01"></path>',
-          chart: '<path d="M3 3v18h18"></path><path d="M18 17V9"></path><path d="M13 17V5"></path><path d="M8 17v-3"></path>',
-          clock: '<circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path>',
-          rotate: '<path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 3v6h-6"></path>',
+          chart:
+            '<path d="M3 3v18h18"></path><path d="M18 17V9"></path><path d="M13 17V5"></path><path d="M8 17v-3"></path>',
+          clock:
+            '<circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path>',
+          rotate:
+            '<path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 3v6h-6"></path>',
         };
         return `<svg ${attrs}>${paths[name] || ""}</svg>`;
       }
@@ -249,46 +350,136 @@
             <p class="mt-2 max-w-md text-sm text-slate-400">Keep your Trello boards clean and healthy. Detect stale cards, track board health, and sweep old cards automatically.</p>
             <button id="signin" class="mt-6 rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-500">Sign in with Trello</button>
           </div>`;
-        document.getElementById("signin").addEventListener("click", async () => {
-          const token = await authorizeWithTrello();
-          onAuth(token);
-        });
+        document
+          .getElementById("signin")
+          .addEventListener("click", async () => {
+            const token = await authorizeWithTrello();
+            onAuth(token);
+          });
       }
 
       async function renderDashboard(root, token) {
-        root.innerHTML = '<div class="flex h-[680px] items-center justify-center"><div class="h-9 w-9 animate-spin rounded-full border-2 border-blue-500/30 border-t-blue-500"></div></div>';
+        root.innerHTML =
+          '<div class="flex h-[680px] items-center justify-center"><div class="h-9 w-9 animate-spin rounded-full border-2 border-blue-500/30 border-t-blue-500"></div></div>';
 
         let cards = demoCards();
         try {
           if (token) {
-            const boards = await trelloFetch("/members/me/boards?filter=open&fields=id", token);
-            const arrays = await Promise.all(
-              boards.slice(0, 5).map((b) =>
-                trelloFetch(`/boards/${b.id}/cards/open?fields=id,name,dateLastActivity,idMembers`, token),
-              ),
+            const boards = await trelloFetch(
+              "/members/me/boards?filter=open&fields=id",
+              token,
             );
-            cards = arrays.flat();
+
+            const boardData = await Promise.all(
+              boards.slice(0, 5).map(async (board) => {
+                const [cards, lists] = await Promise.all([
+                  trelloFetch(
+                    `/boards/${board.id}/cards/open?fields=id,name,dateLastActivity,idMembers,idList,closed`,
+                    token,
+                  ),
+                  trelloFetch(
+                    `/boards/${board.id}/lists?fields=id,name`,
+                    token,
+                  ),
+                ]);
+
+                const listMap = {};
+
+                lists.forEach((list) => {
+                  listMap[list.id] = list.name;
+                });
+
+                return cards.map((card) => ({
+                  ...card,
+                  listName: listMap[card.idList] || "",
+                }));
+              }),
+            );
+
+            cards = boardData.flat();
           }
         } catch (e) {
           console.error(e);
         }
 
-        const threshold = 30;
-        const stale = cards.filter((c) => daysSince(c.dateLastActivity) >= threshold);
-        const atRisk = cards.filter((c) => {
-          const d = daysSince(c.dateLastActivity);
-          return d >= 21 && d < threshold;
+        const threshold = STALE_THRESHOLD;
+
+        // =========================
+        // CARD CATEGORIES
+        // =========================
+
+        const stale = getStaleCards(cards);
+
+        const atRisk = getAtRiskCards(cards);
+
+        const unassigned = getUnassignedCards(cards);
+
+        // =========================
+        // AGING DISTRIBUTION
+        // =========================
+
+        const fresh = cards.filter((card) => {
+          const days = getInactiveDays(card);
+
+          return !card.closed && days <= 7;
         });
-        const unassigned = cards.filter((c) => !c.idMembers?.length);
-        const fresh = cards.filter((c) => daysSince(c.dateLastActivity) <= 7);
-        const aging = cards.filter((c) => {
-          const d = daysSince(c.dateLastActivity);
-          return d >= 8 && d <= 20;
+
+        const aging = cards.filter((card) => {
+          const days = getInactiveDays(card);
+
+          return !card.closed && days >= 8 && days <= 20;
         });
-        const health = computeHealth(cards);
-        const healthColor = health >= 80 ? "#22c55e" : health >= 60 ? "#facc15" : "#ef4444";
-        const healthLabel = health >= 80 ? "Your board is in good health" : health >= 60 ? "Your board needs attention" : "Your board needs cleanup";
-        const maxAge = Math.max(fresh.length, aging.length, atRisk.length, stale.length, 1);
+
+        const atRiskDistribution = atRisk;
+
+        const staleDistribution = stale;
+
+        // =========================
+        // HEALTH SCORE
+        // =========================
+
+        const health = computeHealthScore(
+          cards.length,
+          stale.length,
+          atRisk.length,
+          unassigned.length,
+        );
+
+        const healthInfo = getHealthCategory(health);
+
+        const healthColor = healthInfo.color;
+
+        const healthLabel = healthInfo.message;
+
+        // =========================
+        // HEALTH TREND (7 DAYS)
+        // =========================
+
+        const health7DaysAgo = computeHealth7DaysAgo(cards);
+
+        const trend = health - health7DaysAgo;
+
+        const trendText =
+          trend > 0
+            ? `up ${trend}`
+            : trend < 0
+              ? `down ${Math.abs(trend)}`
+              : "no change";
+
+        const trendColor =
+          trend > 0 ? "#22c55e" : trend < 0 ? "#ef4444" : "#94a3b8";
+
+        // =========================
+        // AGING CHART SCALE
+        // =========================
+
+        const maxAge = Math.max(
+          fresh.length,
+          aging.length,
+          atRiskDistribution.length,
+          staleDistribution.length,
+          1,
+        );
 
         root.innerHTML = `
           <div class="declutter-shell h-[100dvh] max-h-[100dvh] overflow-hidden rounded-lg border border-white/10 bg-[#050a11] text-left shadow-2xl">
@@ -330,7 +521,7 @@
                         <polyline points="12,48 38,35 64,42 90,24 114,36 138,14" fill="none" stroke="#22c55e" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"></polyline>
                         <circle cx="12" cy="48" r="4" fill="#22c55e"></circle><circle cx="38" cy="35" r="4" fill="#22c55e"></circle><circle cx="64" cy="42" r="4" fill="#22c55e"></circle><circle cx="90" cy="24" r="4" fill="#22c55e"></circle><circle cx="114" cy="36" r="4" fill="#22c55e"></circle><circle cx="138" cy="14" r="4" fill="#22c55e"></circle>
                       </svg>
-                      <div class="text-xs text-slate-300">Trend (7 days): <span class="text-green-400">up 6</span></div>
+                     <div class="text-xs text-slate-300"> Trend (7 days): <span style="color:${trendColor}"> ${trendText} </span></div>
                     </div>
                   </div>
                 </section>
@@ -347,10 +538,26 @@
                     <div class="flex-1 space-y-4">
                       ${ageBar("Fresh (0-7 days)", "#22c55e", fresh.length, maxAge)}
                       ${ageBar("Aging (8-20 days)", "#facc15", aging.length, maxAge)}
-                      ${ageBar("At Risk (21-29 days)", "#f97316", atRisk.length, maxAge)}
-                      ${ageBar("Stale (30+ days)", "#ef4444", stale.length, maxAge)}
+                     ${ageBar(
+                       "At Risk (21-29 days)",
+                       "#f97316",
+                       atRiskDistribution.length,
+                       maxAge,
+                     )}
+                      ${ageBar(
+                        "Stale (30+ days)",
+                        "#ef4444",
+                        staleDistribution.length,
+                        maxAge,
+                      )}
                     </div>
-                    ${donut(fresh.length, aging.length, atRisk.length, stale.length, cards.length)}
+                    ${donut(
+                      fresh.length,
+                      aging.length,
+                      atRiskDistribution.length,
+                      staleDistribution.length,
+                      cards.length,
+                    )}
                   </div>
                 </section>
 
@@ -393,14 +600,33 @@
                   <h2 class="mb-3 text-sm font-bold text-white">Quick Actions</h2>
                   <div class="quick-grid grid grid-cols-4 gap-3">
                     ${[
-                      ["circleAlert", "View Stale Cards", `${stale.length} cards`, "#ef4444"],
-                      ["alert", "View At Risk Cards", `${atRisk.length} cards`, "#f59e0b"],
-                      ["user", "View Unassigned Cards", `${unassigned.length} cards`, "#a855f7"],
+                      [
+                        "circleAlert",
+                        "View Stale Cards",
+                        `${stale.length} cards`,
+                        "#ef4444",
+                      ],
+                      [
+                        "alert",
+                        "View At Risk Cards",
+                        `${atRisk.length} cards`,
+                        "#f59e0b",
+                      ],
+                      [
+                        "user",
+                        "View Unassigned Cards",
+                        `${unassigned.length} cards`,
+                        "#a855f7",
+                      ],
                       ["chart", "View Cleanup Summary", "This week", "#3b82f6"],
-                    ].map(([iconName, label, sub, color]) => `
+                    ]
+                      .map(
+                        ([iconName, label, sub, color]) => `
                       <button class="flex min-h-12 items-center justify-between rounded-md border border-white/10 bg-[#111a28] px-3 text-left transition hover:border-white/20 hover:bg-[#162236]">
                         <span class="flex min-w-0 items-center gap-2"><span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full" style="background:${color}20;color:${color}">${icon(iconName, 15)}</span><span class="min-w-0"><span class="block truncate text-xs font-medium text-white">${label}</span><span class="block truncate text-[11px] text-slate-400">${sub}</span></span></span>${icon("arrow", 13, "shrink-0 text-slate-400")}
-                      </button>`).join("")}
+                      </button>`,
+                      )
+                      .join("")}
                   </div>
                 </section>
               </div>
@@ -416,7 +642,9 @@
           if (typeof t.closeModal === "function") t.closeModal();
           else t.closePopup();
         });
-        document.getElementById("refresh")?.addEventListener("click", () => renderDashboard(root, token));
+        document
+          .getElementById("refresh")
+          ?.addEventListener("click", () => renderDashboard(root, token));
         document.getElementById("sweep")?.addEventListener("click", () => {
           alert(`Sweeping ${stale.length} stale cards...`);
         });
