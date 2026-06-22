@@ -402,6 +402,33 @@
           console.error(e);
         }
 
+        function computeHealth7DaysAgo(cards) {
+          const stale7 = cards.filter((card) => {
+            const days = getInactiveDays(card) - 7;
+
+            return !card.closed && days >= STALE_THRESHOLD;
+          });
+
+          const atRisk7 = cards.filter((card) => {
+            const days = getInactiveDays(card) - 7;
+
+            return (
+              !card.closed &&
+              days >= Math.floor(STALE_THRESHOLD * 0.7) &&
+              days < STALE_THRESHOLD
+            );
+          });
+
+          const unassigned7 = getUnassignedCards(cards);
+
+          return computeHealthScore(
+            cards.length,
+            stale7.length,
+            atRisk7.length,
+            unassigned7.length,
+          );
+        }
+
         const threshold = STALE_THRESHOLD;
 
         // =========================
