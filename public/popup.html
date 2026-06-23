@@ -511,12 +511,7 @@
         );
 
         // ── 3. Health score ─────────────────────────────────────────────────────
-        const health = computeHealthScore(
-          total,
-          stale.length,
-          atRisk.length,
-          unassigned.length,
-        );
+        const health = computeHealthScore(allCards, stale, atRisk);
         const { label: catLabel, color: healthColor } = healthCategory(health);
 
         // ── 4. Trend ────────────────────────────────────────────────────────────
