@@ -523,7 +523,7 @@
         // ── 4. Trend ────────────────────────────────────────────────────────────
         const { history: trendHistory, trend } = await updateTrend(health);
 
-        // ── 5. Last-updated timestamp ───────────────────────────────────────────
+        // ── 5. Last-updated timestamp  ───────────────────────────────────────────
         const now = new Date();
         const updatedAt = now.toLocaleTimeString([], {
           hour: "2-digit",
