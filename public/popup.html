@@ -462,6 +462,7 @@
         let allCards = [];
         let boardName = "";
         let fetchError = null;
+        let doneListIds = new Set();
 
         try {
           // Get the board ID of the board currently open in Trello
@@ -474,7 +475,7 @@
           );
 
           // Identify done-list IDs so we can exclude them
-          const doneListIds = new Set(
+          doneListIds = new Set(
             lists
               .filter((l) => DONE_LIST_PATTERN.test(l.name))
               .map((l) => l.id),
