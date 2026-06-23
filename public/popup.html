@@ -157,15 +157,21 @@
       // A card is Healthy only if ALL three conditions are met:
       //   ✅ Not Stale  ✅ Not At Risk  ✅ Assigned to at least one member
       // Health Score = (Healthy Cards / Total Active Cards) × 100
-      function computeHealthScore(cards, staleSet, atRiskSet) {
+      function computeHealthScore(cards, staleCards, atRiskCards) {
         const total = cards.length;
+
         if (total === 0) return 100;
+
+        const staleIds = new Set(staleCards.map((c) => c.id));
+        const atRiskIds = new Set(atRiskCards.map((c) => c.id));
+
         const healthyCount = cards.filter(
           (c) =>
-            !staleSet.has(c.id) &&
-            !atRiskSet.has(c.id) &&
+            !staleIds.has(c.id) &&
+            !atRiskIds.has(c.id) &&
             c.idMembers?.length > 0,
         ).length;
+
         return Math.round((healthyCount / total) * 100);
       }
 
@@ -511,7 +517,7 @@
         );
 
         // ── 3. Health score ─────────────────────────────────────────────────────
-        const health = computeHealthScore(allCards, stale, atRisk);
+        const health = computeHealthScore(cards, stale, atRisk);
         const { label: catLabel, color: healthColor } = healthCategory(health);
 
         // ── 4. Trend ────────────────────────────────────────────────────────────
