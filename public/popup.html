@@ -415,7 +415,31 @@
           </div>`;
 
         // ── 1. Fetch current board's lists + cards ──────────────────────────────
-        const threshold = 30; // days; could later be made configurable via t.get
+        // Load threshold from board storage (falls back to 30 if not set)
+        let threshold = 30;
+        try {
+          const storedThreshold = await t.get(
+            "board",
+            "shared",
+            "staleThreshold",
+          );
+          if (
+            storedThreshold &&
+            Number.isFinite(+storedThreshold) &&
+            +storedThreshold > 0
+          ) {
+            threshold = +storedThreshold;
+          }
+        } catch {}
+
+        // Compute relative age-bracket boundaries from threshold
+        // 🟢 Fresh   = 0%–25%  of threshold
+        // 🟡 Aging   = 26%–60% of threshold
+        // 🟠 At Risk = 61%–99% of threshold
+        // 🔴 Stale   = threshold+
+        const freshMax = Math.floor(threshold * 0.25); // last day of Fresh
+        const agingMax = Math.floor(threshold * 0.6); // last day of Aging
+        const atRiskMax = threshold - 1; // last day of At Risk
         let cards = [];
         let allCards = [];
         let boardName = "";
@@ -459,20 +483,20 @@
         }
 
         // ── 2. Classify cards ───────────────────────────────────────────────────
-        const atRiskMin = Math.floor(threshold * 0.7); // 70% of threshold
-
         const stale = cards.filter(
           (c) => daysSince(c.dateLastActivity) >= threshold,
         );
         const atRisk = cards.filter((c) => {
           const d = daysSince(c.dateLastActivity);
-          return d >= atRiskMin && d < threshold;
+          return d > agingMax && d < threshold;
         });
         const unassigned = cards.filter((c) => !c.idMembers?.length);
-        const fresh = cards.filter((c) => daysSince(c.dateLastActivity) <= 7);
+        const fresh = cards.filter(
+          (c) => daysSince(c.dateLastActivity) <= freshMax,
+        );
         const aging = cards.filter((c) => {
           const d = daysSince(c.dateLastActivity);
-          return d >= 8 && d < atRiskMin;
+          return d > freshMax && d <= agingMax;
         });
 
         const total = allCards.length;
@@ -584,10 +608,10 @@
                   <h2 class="mb-4 text-base font-bold text-white">Aging Distribution</h2>
                   <div class="aging-flex flex items-center gap-7">
                     <div class="flex-1 space-y-4">
-                      ${ageBar("Fresh (0–7 days)", "#22c55e", fresh.length, maxAge)}
-                      ${ageBar("Aging (8–20 days)", "#facc15", aging.length, maxAge)}
-                      ${ageBar("At Risk (21–29 days)", "#f97316", atRisk.length, maxAge)}
-                      ${ageBar("Stale (30+ days)", "#ef4444", stale.length, maxAge)}
+                      ${ageBar(`Fresh (0–${freshMax} days)`, "#22c55e", fresh.length, maxAge)}
+                      ${ageBar(`Aging (${freshMax + 1}–${agingMax} days)`, "#facc15", aging.length, maxAge)}
+                      ${ageBar(`At Risk (${agingMax + 1}–${atRiskMax} days)`, "#f97316", atRisk.length, maxAge)}
+                      ${ageBar(`Stale (${threshold}+ days)`, "#ef4444", stale.length, maxAge)}
                     </div>
                     ${donut(fresh.length, aging.length, atRisk.length, stale.length, total)}
                   </div>
@@ -732,6 +756,19 @@
         document.getElementById("refresh")?.addEventListener("click", () => {
           renderDashboard(root, token);
         });
+
+        // Save threshold on change and re-render so all ranges update live
+        document
+          .getElementById("thresholdInput")
+          ?.addEventListener("change", async (e) => {
+            const val = parseInt(e.target.value, 10);
+            if (Number.isFinite(val) && val > 0) {
+              try {
+                await t.set("board", "shared", "staleThreshold", val);
+              } catch {}
+              renderDashboard(root, token);
+            }
+          });
 
         document.getElementById("sweep")?.addEventListener("click", () => {
           if (stale.length === 0) {
