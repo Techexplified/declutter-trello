@@ -153,18 +153,20 @@
         );
       }
 
-      // ─── Health formula (per spec) ───────────────────────────────────────────
-      // Score = (Total - Stale - AtRisk - Unassigned) / Total * 100, floored at 0
-      // Each card can be counted in multiple penalty buckets.
-      function computeHealthScore(
-        total,
-        staleCount,
-        atRiskCount,
-        unassignedCount,
-      ) {
+      // ─── Health formula ───────────────────────────────────────────────────────
+      // A card is Healthy only if ALL three conditions are met:
+      //   ✅ Not Stale  ✅ Not At Risk  ✅ Assigned to at least one member
+      // Health Score = (Healthy Cards / Total Active Cards) × 100
+      function computeHealthScore(cards, staleSet, atRiskSet) {
+        const total = cards.length;
         if (total === 0) return 100;
-        const penalised = staleCount + atRiskCount + unassignedCount;
-        return Math.max(0, Math.round(((total - penalised) / total) * 100));
+        const healthyCount = cards.filter(
+          (c) =>
+            !staleSet.has(c.id) &&
+            !atRiskSet.has(c.id) &&
+            c.idMembers?.length > 0,
+        ).length;
+        return Math.round((healthyCount / total) * 100);
       }
 
       function healthCategory(score) {
