@@ -541,11 +541,7 @@
 
         // ── Wire controls ─────────────────────────────────────────────────────
         document.getElementById("btn-back")?.addEventListener("click", () => {
-          t.closeModal();
-          t.popup({
-            title: "Declutter – Stale Card Manager",
-            url: t.signUrl("./popup.html"),
-          });
+          window.location.href = t.signUrl("./popup.html");
         });
 
         document.getElementById("btn-close")?.addEventListener("click", () => {

@@ -796,12 +796,7 @@
         document
           .getElementById("view-stale-cards")
           ?.addEventListener("click", () => {
-            t.modal({
-              url: t.signUrl("./stale-cards.html"),
-              title: "Stale Cards",
-              height: getModalHeight(),
-              fullscreen: false,
-            });
+            window.location.href = t.signUrl("./stale-cards.html");
           });
 
         document.getElementById("sweep")?.addEventListener("click", () => {
