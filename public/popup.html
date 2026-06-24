@@ -296,7 +296,7 @@
         return `<svg ${attrs}>${paths[name] || ""}</svg>`;
       }
 
-      function statCard({ iconName, label, count, sub, color }) {
+      function statCard({ iconName, label, count, sub, color, btnId }) {
         return `
           <div class="rounded-lg border border-white/10 bg-[#0f1724] p-4">
             <div class="flex items-center gap-2 text-sm font-medium text-white">
@@ -305,7 +305,7 @@
             </div>
             <div class="mt-2 text-3xl font-bold leading-none" style="color:${color}">${count}</div>
             <div class="mt-1 text-xs text-slate-300">${sub}</div>
-            <button class="mt-3 flex h-7 w-full items-center justify-center gap-2 rounded-md border bg-transparent text-xs font-medium hover:bg-white/5" style="border-color:${color}80;color:${color}">
+            <button ${btnId ? `id="${btnId}"` : ""} class="mt-3 flex h-7 w-full items-center justify-center gap-2 rounded-md border bg-transparent text-xs font-medium hover:bg-white/5" style="border-color:${color}80;color:${color}">
               View All ${icon("arrow", 13)}
             </button>
           </div>`;
@@ -612,7 +612,7 @@
 
                 <!-- Stat cards -->
                 <div class="stats-grid grid grid-cols-3 gap-3">
-                  ${statCard({ iconName: "circleAlert", label: "Stale Cards", count: stale.length, sub: "Need immediate action", color: "#ef4444" })}
+                  ${statCard({ iconName: "circleAlert", label: "Stale Cards", count: stale.length, sub: "Need immediate action", color: "#ef4444", btnId: "view-stale-cards" })}
                   ${statCard({ iconName: "alert", label: "At Risk Cards", count: atRisk.length, sub: "May become stale soon", color: "#f59e0b" })}
                   ${statCard({ iconName: "user", label: "Unassigned Cards", count: unassigned.length, sub: "No members assigned", color: "#a855f7" })}
                 </div>
@@ -782,6 +782,18 @@
               } catch {}
               renderDashboard(root, token);
             }
+          });
+
+        // Open dedicated Stale Cards view
+        document
+          .getElementById("view-stale-cards")
+          ?.addEventListener("click", () => {
+            t.modal({
+              url: t.signUrl("./stale-cards.html"),
+              title: "Stale Cards",
+              height: 680,
+              fullscreen: false,
+            });
           });
 
         document.getElementById("sweep")?.addEventListener("click", () => {
