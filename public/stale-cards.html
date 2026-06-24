@@ -359,16 +359,17 @@
               </td>
               <td class="py-3 pr-4 text-sm text-slate-400 tabular-nums">${fmtDate(c.lastActivity)}</td>
               <td class="py-3 pr-4">
-                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button class="btn-open flex items-center gap-1 rounded-md border border-white/10 bg-transparent
-                    px-2 py-1 text-xs text-slate-300 hover:bg-white/5 hover:text-white"
-                    data-id="${c.id}">
-                    Open ${icon("open", 12)}
-                  </button>
-                  <button class="rounded-md border border-white/10 bg-transparent p-1.5 text-slate-400 hover:bg-white/5 hover:text-white">
-                    ${icon("dots", 14)}
-                  </button>
-                </div>
+                    <div class="flex items-center gap-1">
+                        <button class="btn-open flex items-center gap-1 rounded-md border border-white/10 bg-transparent
+                        px-2 py-1 text-xs text-slate-300 hover:bg-white/5 hover:text-white"
+                        data-id="${c.id}">
+                        Open ${icon("open", 12)}
+                        </button>
+
+                        <button class="rounded-md border border-white/10 bg-transparent p-1.5 text-slate-400 hover:bg-white/5 hover:text-white">
+                        ${icon("dots", 14)}
+                        </button>
+                    </div>
               </td>
             </tr>`,
             )
