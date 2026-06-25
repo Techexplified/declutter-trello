@@ -424,10 +424,6 @@
                 <span class="text-lg font-bold text-white">Stale Cards</span>
               </div>
             </div>
-            <button id="btn-close"
-              class="rounded-md bg-transparent p-1 text-slate-400 hover:bg-white/5 hover:text-white">
-              ${icon("x", 20)}
-            </button>
           </div>
 
           <!-- Sub-header: Summary -->
@@ -557,11 +553,6 @@
         // ── Wire controls ─────────────────────────────────────────────────────
         document.getElementById("btn-back")?.addEventListener("click", () => {
           window.location.href = t.signUrl("./popup.html");
-        });
-
-        document.getElementById("btn-close")?.addEventListener("click", () => {
-          if (typeof t.closeModal === "function") t.closeModal();
-          else t.closePopup();
         });
 
         document
