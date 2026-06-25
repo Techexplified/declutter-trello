@@ -389,10 +389,10 @@
 
           // Wire Open buttons
           tbody.querySelectorAll(".btn-open").forEach((btn) => {
-            btn.addEventListener("click", () => {
+            btn.addEventListener("click", async () => {
               const cardId = btn.dataset.id;
               t.navigate({ url: `https://trello.com/c/${cardId}` });
-              t.closePopup();
+              await t.closeModal();
             });
           });
         }
