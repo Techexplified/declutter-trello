@@ -116,14 +116,15 @@
 
       /* ── Bottom action bar ── */
       #action-bar {
-        transition:
-          transform 0.2s ease,
-          opacity 0.2s ease;
+        transition: opacity 0.2s ease;
       }
+
       #action-bar.hidden-bar {
-        transform: translateY(100%);
-        opacity: 0;
-        pointer-events: none;
+        display: none;
+      }
+
+      #action-bar:not(.hidden-bar) {
+        display: flex;
       }
     </style>
   </head>
