@@ -432,22 +432,19 @@
 
           <!-- Sub-header: subtitle + summary chips -->
           <div class="border-b border-white/10 px-5 py-3 shrink-0">
-            <p class="text-sm text-slate-400">
-              ${totalStale} card${totalStale === 1 ? "" : "s"} haven't had any activity for ${threshold}+ days
-            </p>
-            <div class="mt-3 flex items-center gap-3 flex-wrap">
+            <div class="flex items-center gap-3 flex-wrap">
               <!-- Total Stale -->
-              <div class="rounded-lg border border-white/10 bg-[#0b1320] px-4 py-2.5 flex flex-col gap-0.5">
+              <div class="rounded-lg border border-white/10 bg-[#0b1320] px-5 py-2 flex items-center gap-3 min-w-[170px]">
                 <span class="text-xl font-bold text-red-400">${totalStale}</span>
                 <span class="text-xs text-slate-400">Total Stale Cards</span>
               </div>
               <!-- Days Inactive -->
-              <div class="rounded-lg border border-white/10 bg-[#0b1320] px-4 py-2.5 flex flex-col gap-0.5">
+              <div class="rounded-lg border border-white/10 bg-[#0b1320] px-5 py-2 flex items-center gap-3 min-w-[170px]">
                 <span class="text-xl font-bold text-white">${threshold}+</span>
                 <span class="text-xs text-slate-400">Days Inactive</span>
               </div>
               <!-- Lists Affected -->
-              <div class="rounded-lg border border-white/10 bg-[#0b1320] px-4 py-2.5 flex flex-col gap-0.5">
+              <div class="rounded-lg border border-white/10 bg-[#0b1320] px-5 py-2 flex items-center gap-3 min-w-[170px]">
                 <div class="flex items-center gap-1.5">
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
                   <span class="text-xl font-bold text-white">${listsAffected}</span>
