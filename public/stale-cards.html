@@ -392,6 +392,7 @@
             btn.addEventListener("click", () => {
               const cardId = btn.dataset.id;
               t.navigate({ url: `https://trello.com/c/${cardId}` });
+              t.closePopup();
             });
           });
         }
