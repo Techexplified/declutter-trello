@@ -1,0 +1,1064 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>At Risk Cards – Declutter</title>
+    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #050a11;
+        color: #e2e8f0;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        box-sizing: border-box;
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: inherit;
+      }
+
+      #root {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* ── Scrollbar ── */
+      .scrollbar-thin::-webkit-scrollbar {
+        width: 6px;
+      }
+      .scrollbar-thin::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .scrollbar-thin::-webkit-scrollbar-thumb {
+        background: #ffffff22;
+        border-radius: 999px;
+      }
+
+      /* ── Table ── */
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      thead th {
+        position: sticky;
+        top: 0;
+        background: #070e1a;
+        z-index: 1;
+      }
+
+      /* ── Checkbox ── */
+      input[type="checkbox"] {
+        accent-color: #f59e0b;
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+
+      /* ── Row hover ── */
+      tbody tr {
+        transition: background 0.12s;
+      }
+      tbody tr:hover {
+        background: #0f1c2e;
+      }
+
+      /* ── Days badge colours ── */
+      .days-high {
+        color: #f97316;
+      }
+      .days-medium {
+        color: #f59e0b;
+      }
+      .days-low {
+        color: #facc15;
+      }
+
+      /* ── Remind button pulse ── */
+      @keyframes remind-pulse {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 #f59e0b40;
+        }
+        50% {
+          box-shadow: 0 0 0 6px #f59e0b00;
+        }
+      }
+      .remind-btn {
+        animation: remind-pulse 2.2s ease-in-out infinite;
+      }
+
+      /* ── Spinner ── */
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .spin {
+        animation: spin 0.8s linear infinite;
+      }
+
+      /* ── Avatar colours (cycled by index) ── */
+      .av-0 {
+        background: #3b82f6;
+      }
+      .av-1 {
+        background: #8b5cf6;
+      }
+      .av-2 {
+        background: #10b981;
+      }
+      .av-3 {
+        background: #f59e0b;
+      }
+      .av-4 {
+        background: #ef4444;
+      }
+      .av-5 {
+        background: #ec4899;
+      }
+      .av-6 {
+        background: #06b6d4;
+      }
+      .av-7 {
+        background: #84cc16;
+      }
+
+      /* ── More-actions dropdown ── */
+      #more-actions-menu {
+        display: none;
+        position: absolute;
+        right: 0;
+        bottom: calc(100% + 4px);
+        z-index: 50;
+        min-width: 160px;
+        background: #0f1724;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 4px 0;
+        box-shadow: 0 8px 24px #000a;
+      }
+      #more-actions-menu.open {
+        display: block;
+      }
+      #more-actions-menu button {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        padding: 7px 14px;
+        font-size: 13px;
+        color: #cbd5e1;
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        text-align: left;
+      }
+      #more-actions-menu button:hover {
+        background: rgba(255, 255, 255, 0.05);
+        color: #fff;
+      }
+
+      /* ── Pagination button ── */
+      .pg-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: transparent;
+        color: #94a3b8;
+        cursor: pointer;
+        font-size: 13px;
+        transition:
+          background 0.12s,
+          color 0.12s;
+      }
+      .pg-btn:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.05);
+        color: #fff;
+      }
+      .pg-btn.active {
+        background: #f59e0b22;
+        border-color: #f59e0b80;
+        color: #f59e0b;
+        font-weight: 700;
+      }
+      .pg-btn:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <script type="module">
+      const t = TrelloPowerUp.iframe();
+      const TRELLO_APP_KEY = "2082693e62994dce1c1cba5f43e4711b";
+      const DONE_LIST_PATTERN = /\b(done|completed|closed|finished)\b/i;
+      const PAGE_SIZE = 10;
+
+      // ── Helpers ──────────────────────────────────────────────────────────────
+      const getToken = () => t.get("member", "private", "token");
+
+      function trelloFetch(path, token) {
+        const sep = path.includes("?") ? "&" : "?";
+        return fetch(
+          `https://api.trello.com/1${path}${sep}key=${TRELLO_APP_KEY}&token=${token}`,
+        ).then((r) => {
+          if (!r.ok) throw new Error(`Trello API ${r.status}: ${path}`);
+          return r.json();
+        });
+      }
+
+      const daysSince = (d) =>
+        Math.floor((Date.now() - new Date(d).getTime()) / 86_400_000);
+
+      function fmtDate(dateStr) {
+        return new Date(dateStr).toLocaleDateString(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        });
+      }
+
+      // Simulate a last-activity type label (Trello REST doesn't expose this
+      // directly on the cards list endpoint; wire to real actions API if needed)
+      const ACT_LABELS = [
+        "Edited",
+        "Commented",
+        "Checklist",
+        "Moved",
+        "Attached",
+      ];
+      function actLabel(cardId) {
+        // deterministic pseudo-random based on card id characters
+        const seed =
+          cardId.charCodeAt(0) + cardId.charCodeAt(cardId.length - 1);
+        return ACT_LABELS[seed % ACT_LABELS.length];
+      }
+
+      function daysClass(days, threshold) {
+        const pct = days / threshold;
+        if (pct >= 0.9) return "days-high";
+        if (pct >= 0.7) return "days-medium";
+        return "days-low";
+      }
+
+      // Avatar colour cycling
+      const avColor = (idx) => `av-${idx % 8}`;
+
+      function icon(name, size = 16, cls = "") {
+        const a = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round" class="${cls}"`;
+        const p = {
+          arrowLeft: '<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>',
+          warning:
+            '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+          x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+          help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 1 1 5.82 1c0 2-3 2-3 4"/><path d="M12 17h.01"/>',
+          dots3h:
+            '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+          bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+          settings:
+            '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+          search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>',
+          sortLines: '<path d="M3 6h18M7 12h10M11 18h2"/>',
+          filter:
+            '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
+          open: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
+          dots: '<circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>',
+          info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+          arrowUp: '<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>',
+          remind:
+            '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+          users:
+            '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+          bulb: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1.33.54 2.37 1.5 3.5.76.76 1.23 1.52 1.41 2.5"/>',
+          chevLeft: '<path d="m15 18-6-6 6-6"/>',
+          chevRight: '<path d="m9 18 6-6-6-6"/>',
+          list: '<line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><polyline points="4 6 5 7 7 5"/><polyline points="4 12 5 13 7 11"/><polyline points="4 18 5 19 7 17"/>',
+          archive:
+            '<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>',
+          move: '<polyline points="5 9 2 12 5 15"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/>',
+          label:
+            '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
+        };
+        return `<svg ${a}>${p[name] ?? ""}</svg>`;
+      }
+
+      // ── Loading ───────────────────────────────────────────────────────────────
+      function renderLoading(root) {
+        root.innerHTML = `
+          <div class="flex h-full flex-col items-center justify-center gap-3 text-slate-400">
+            <svg class="spin" width="32" height="32" viewBox="0 0 24 24"
+              fill="none" stroke="#f59e0b" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+              <path d="M3 3v5h5"/>
+            </svg>
+            <span class="text-sm">Loading at-risk cards…</span>
+          </div>`;
+      }
+
+      // ── Main ─────────────────────────────────────────────────────────────────
+      async function render() {
+        const root = document.getElementById("root");
+        renderLoading(root);
+
+        let token;
+        try {
+          token = await getToken();
+        } catch {}
+        if (!token) {
+          root.innerHTML = `<div class="flex h-full items-center justify-center text-sm text-red-400 p-6 text-center">
+            Not authenticated. Please open Declutter from the main popup first.</div>`;
+          return;
+        }
+
+        // ── Thresholds (mirror popup.html logic) ──────────────────────────────
+        let threshold = 30;
+        let freshMax = 7;
+        let agingMax = 14;
+
+        try {
+          threshold = (await t.get("board", "shared", "staleThreshold")) || 30;
+          // Derive agingMax from threshold: at-risk window is upper ~33% before stale
+          agingMax = Math.max(Math.floor(threshold * 0.5), freshMax + 1);
+        } catch {}
+
+        // ── Fetch board data ──────────────────────────────────────────────────
+        let atRiskCards = [];
+        let memberMap = {}; // id → { name, initials, avIdx }
+        let fetchError = null;
+
+        try {
+          const boardId = await t.board("id").then((b) => b.id);
+
+          const [lists, allCards] = await Promise.all([
+            trelloFetch(
+              `/boards/${boardId}/lists?filter=open&fields=id,name`,
+              token,
+            ),
+            trelloFetch(
+              `/boards/${boardId}/cards/open?fields=id,name,dateLastActivity,idMembers,idList,badges`,
+              token,
+            ),
+          ]);
+
+          const listMap = Object.fromEntries(lists.map((l) => [l.id, l.name]));
+          const doneIds = new Set(
+            lists
+              .filter((l) => DONE_LIST_PATTERN.test(l.name))
+              .map((l) => l.id),
+          );
+
+          atRiskCards = allCards
+            .filter((c) => {
+              if (doneIds.has(c.idList)) return false;
+              const d = daysSince(c.dateLastActivity);
+              return d > agingMax && d < threshold;
+            })
+            .map((c) => ({
+              id: c.id,
+              name: c.name,
+              listName: listMap[c.idList] ?? "Unknown",
+              daysInactive: daysSince(c.dateLastActivity),
+              lastActivity: c.dateLastActivity,
+              idMembers: c.idMembers ?? [],
+              comments: c.badges?.comments ?? 0,
+              attachments: c.badges?.attachments ?? 0,
+            }))
+            .sort((a, b) => b.daysInactive - a.daysInactive);
+
+          // Fetch member details (deduplicated)
+          const allMemberIds = [
+            ...new Set(atRiskCards.flatMap((c) => c.idMembers)),
+          ];
+          let avIdx = 0;
+          await Promise.all(
+            allMemberIds.map(async (id) => {
+              try {
+                const m = await trelloFetch(
+                  `/members/${id}?fields=fullName,initials`,
+                  token,
+                );
+                memberMap[id] = {
+                  name: m.fullName ?? "Unknown",
+                  initials: m.initials ?? "?",
+                  avIdx: avIdx++,
+                };
+              } catch {
+                memberMap[id] = {
+                  name: "Unknown",
+                  initials: "?",
+                  avIdx: avIdx++,
+                };
+              }
+            }),
+          );
+        } catch (e) {
+          fetchError = e.message || "Unknown error";
+        }
+
+        // ── Derived summary stats ─────────────────────────────────────────────
+        const totalAtRisk = atRiskCards.length;
+        const listsAffected = new Set(atRiskCards.map((c) => c.listName)).size;
+        const membersAssigned = new Set(atRiskCards.flatMap((c) => c.idMembers))
+          .size;
+        const inactivityRange = `${agingMax + 1}–${threshold - 1} days`;
+
+        // ── UI state ──────────────────────────────────────────────────────────
+        let searchQuery = "";
+        let sortDir = "desc"; // desc = most days first
+        let filterList = "all";
+        let selected = new Set();
+        let currentPage = 1;
+
+        const uniqueLists = [
+          ...new Set(atRiskCards.map((c) => c.listName)),
+        ].sort();
+
+        // ── Helpers ───────────────────────────────────────────────────────────
+        function filteredCards() {
+          return atRiskCards
+            .filter((c) => {
+              const q = searchQuery.toLowerCase();
+              return (
+                (filterList === "all" || c.listName === filterList) &&
+                (c.name.toLowerCase().includes(q) ||
+                  c.listName.toLowerCase().includes(q))
+              );
+            })
+            .sort((a, b) =>
+              sortDir === "desc"
+                ? b.daysInactive - a.daysInactive
+                : a.daysInactive - b.daysInactive,
+            );
+        }
+
+        function pagedCards() {
+          const all = filteredCards();
+          const start = (currentPage - 1) * PAGE_SIZE;
+          return {
+            page: all.slice(start, start + PAGE_SIZE),
+            total: all.length,
+          };
+        }
+
+        function totalPages() {
+          return Math.max(1, Math.ceil(filteredCards().length / PAGE_SIZE));
+        }
+
+        function escHtml(s) {
+          return String(s)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+        }
+        const escAttr = escHtml;
+
+        // ── Assignee avatar chip ───────────────────────────────────────────────
+        function assigneeChip(idMembers) {
+          if (!idMembers.length) {
+            return `<span class="text-xs text-slate-500 italic">Unassigned</span>`;
+          }
+          const m = memberMap[idMembers[0]];
+          if (!m) return `<span class="text-xs text-slate-500 italic">—</span>`;
+          const short = m.name
+            .split(" ")
+            .map((w) => w[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase();
+          const lastName = m.name.split(" ").slice(-1)[0];
+          return `
+            <div class="flex items-center gap-1.5">
+              <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${avColor(m.avIdx)}">
+                ${escHtml(short)}
+              </span>
+              <span class="text-xs text-slate-300 truncate max-w-[70px]">${escHtml(lastName)}.</span>
+              ${
+                idMembers.length > 1
+                  ? `<span class="text-[10px] text-slate-500">+${idMembers.length - 1}</span>`
+                  : ""
+              }
+            </div>`;
+        }
+
+        // ── Row renderer ──────────────────────────────────────────────────────
+        function renderRows() {
+          const tbody = document.getElementById("card-tbody");
+          if (!tbody) return;
+
+          const { page, total } = pagedCards();
+
+          // Pagination footer text
+          const start = (currentPage - 1) * PAGE_SIZE + 1;
+          const end = Math.min(currentPage * PAGE_SIZE, total);
+          const pgText = document.getElementById("pg-text");
+          if (pgText)
+            pgText.textContent =
+              total > 0
+                ? `Showing ${start} to ${end} of ${total} cards`
+                : "No cards found";
+
+          renderPagination(total);
+
+          if (page.length === 0) {
+            tbody.innerHTML = `
+              <tr><td colspan="7"
+                class="py-10 text-center text-sm text-slate-500">
+                No at-risk cards match your search / filter.
+              </td></tr>`;
+            return;
+          }
+
+          tbody.innerHTML = page
+            .map(
+              (c) => `
+            <tr class="border-b border-white/5 group" data-id="${c.id}">
+              <!-- Checkbox -->
+              <td class="py-3 pl-4 pr-2 w-8">
+                <input type="checkbox" class="row-check" data-id="${c.id}"
+                  ${selected.has(c.id) ? "checked" : ""}>
+              </td>
+              <!-- Card name + meta -->
+              <td class="py-3 pr-3">
+                <div class="flex items-center gap-2">
+                  <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#f59e0b22] text-amber-400">
+                    ${icon("list", 14)}
+                  </span>
+                  <div class="min-w-0">
+                    <div class="text-sm font-medium text-white leading-snug truncate max-w-[160px]">
+                      ${escHtml(c.name)}
+                    </div>
+                    <div class="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                      ${c.comments ? `<span>💬 ${c.comments}</span>` : ""}
+                      ${c.attachments ? `<span>📎 ${c.attachments}</span>` : ""}
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <!-- List -->
+              <td class="py-3 pr-3">
+                <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs
+                  font-medium bg-white/5 text-slate-300 border border-white/10">
+                  <span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>
+                  ${escHtml(c.listName)}
+                </span>
+              </td>
+              <!-- Days Inactive -->
+              <td class="py-3 pr-3">
+                <div class="font-semibold text-sm ${daysClass(c.daysInactive, threshold)}">
+                  ${c.daysInactive} days
+                </div>
+                <div class="text-[11px] text-amber-500 mt-0.5">At Risk</div>
+              </td>
+              <!-- Last Activity -->
+              <td class="py-3 pr-3">
+                <div class="text-sm text-slate-300 tabular-nums">${fmtDate(c.lastActivity)}</div>
+                <div class="text-[11px] text-slate-500 mt-0.5">(${actLabel(c.id)})</div>
+              </td>
+              <!-- Assignee -->
+              <td class="py-3 pr-3">${assigneeChip(c.idMembers)}</td>
+              <!-- Actions -->
+              <td class="py-3 pr-4">
+                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button class="btn-open flex items-center gap-1 rounded-md border border-white/10
+                    bg-transparent px-2 py-1 text-xs text-slate-300 hover:bg-white/5 hover:text-white"
+                    data-id="${c.id}">
+                    Open ${icon("open", 11)}
+                  </button>
+                  <button class="rounded-md border border-white/10 bg-transparent p-1.5
+                    text-slate-400 hover:bg-white/5 hover:text-white">
+                    ${icon("dots", 14)}
+                  </button>
+                </div>
+              </td>
+            </tr>`,
+            )
+            .join("");
+
+          // Wire row checkboxes
+          tbody.querySelectorAll(".row-check").forEach((cb) => {
+            cb.addEventListener("change", () => {
+              cb.checked
+                ? selected.add(cb.dataset.id)
+                : selected.delete(cb.dataset.id);
+              syncMasterCheck();
+              updateBottomBar();
+            });
+          });
+
+          // Wire Open buttons
+          tbody.querySelectorAll(".btn-open").forEach((btn) => {
+            btn.addEventListener("click", () =>
+              t.navigate({ url: `https://trello.com/c/${btn.dataset.id}` }),
+            );
+          });
+        }
+
+        // ── Pagination renderer ───────────────────────────────────────────────
+        function renderPagination(total) {
+          const container = document.getElementById("pg-numbers");
+          if (!container) return;
+          const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+          let html = "";
+          for (let i = 1; i <= pages; i++) {
+            html += `<button class="pg-btn ${i === currentPage ? "active" : ""}"
+              data-page="${i}">${i}</button>`;
+          }
+          container.innerHTML = html;
+          container.querySelectorAll(".pg-btn[data-page]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              currentPage = parseInt(btn.dataset.page);
+              renderRows();
+              syncMasterCheck();
+            });
+          });
+          const prev = document.getElementById("pg-prev");
+          const next = document.getElementById("pg-next");
+          if (prev) prev.disabled = currentPage <= 1;
+          if (next) next.disabled = currentPage >= pages;
+        }
+
+        function syncMasterCheck() {
+          const master = document.getElementById("master-check");
+          if (!master) return;
+          const cards = filteredCards().slice(
+            (currentPage - 1) * PAGE_SIZE,
+            currentPage * PAGE_SIZE,
+          );
+          const allChecked =
+            cards.length > 0 && cards.every((c) => selected.has(c.id));
+          master.checked = allChecked;
+          master.indeterminate =
+            !allChecked && cards.some((c) => selected.has(c.id));
+        }
+
+        function updateBottomBar() {
+          const cnt = document.getElementById("sel-count");
+          const rBtn = document.getElementById("btn-remind-sel");
+          const mBtn = document.getElementById("btn-move-top");
+          if (cnt) cnt.textContent = `${selected.size} selected`;
+          const hasSelection = selected.size > 0;
+          [rBtn, mBtn].forEach((b) => {
+            if (!b) return;
+            b.style.opacity = hasSelection ? "1" : "0.45";
+            b.style.pointerEvents = hasSelection ? "auto" : "none";
+          });
+        }
+
+        // ── Full page HTML ────────────────────────────────────────────────────
+        root.innerHTML = `
+          <!-- ── Header ── -->
+          <div class="flex items-center justify-between border-b border-white/10 px-5 py-4 shrink-0">
+            <div class="flex items-center gap-3">
+              <button id="btn-back"
+                class="flex items-center gap-1.5 rounded-md bg-transparent px-2 py-1 text-sm
+                  text-slate-400 hover:bg-white/5 hover:text-white">
+                ${icon("arrowLeft", 16)} Back
+              </button>
+              <div class="h-5 w-px bg-white/10"></div>
+              <div class="flex items-center gap-2">
+                <div class="flex h-7 w-7 items-center justify-center rounded-full bg-amber-500/20 text-amber-400">
+                  ${icon("warning", 16)}
+                </div>
+                <span class="text-lg font-bold text-white">At Risk Cards</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="rounded-md bg-transparent p-1.5 text-slate-400 hover:bg-white/5 hover:text-white">
+                ${icon("help", 16)}
+              </button>
+              <button class="rounded-md bg-transparent p-1.5 text-slate-400 hover:bg-white/5 hover:text-white">
+                ${icon("dots3h", 16)}
+              </button>
+              <div class="h-5 w-px bg-white/10 mx-1"></div>
+              <button id="btn-close"
+                class="rounded-md bg-transparent p-1 text-slate-400 hover:bg-white/5 hover:text-white">
+                ${icon("x", 20)}
+              </button>
+            </div>
+          </div>
+
+          <!-- ── Sub-header ── -->
+          <div class="border-b border-white/10 px-5 py-3 shrink-0">
+            <p class="text-sm text-slate-400">
+              ${totalAtRisk} card${totalAtRisk === 1 ? "" : "s"} may become stale soon
+              (${inactivityRange} inactive)
+            </p>
+            <div class="mt-3 flex items-center gap-3 flex-wrap">
+
+              <!-- At Risk count -->
+              <div class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 flex flex-col gap-0.5">
+                <span class="text-xl font-bold text-amber-400">${totalAtRisk}</span>
+                <span class="text-xs text-amber-300/70">At Risk Cards</span>
+                <span class="text-[10px] text-amber-300/50">${agingMax + 1}–${threshold - 1} days inactive</span>
+              </div>
+
+              <!-- Inactivity Range -->
+              <div class="rounded-lg border border-white/10 bg-[#0b1320] px-4 py-2.5 flex flex-col gap-0.5">
+                <div class="flex items-center gap-1.5">
+                  ${icon("sortLines", 15, "text-slate-400")}
+                  <span class="text-xl font-bold text-white">${inactivityRange}</span>
+                </div>
+                <span class="text-xs text-slate-400">Inactivity Range</span>
+              </div>
+
+              <!-- Lists Affected -->
+              <div class="rounded-lg border border-white/10 bg-[#0b1320] px-4 py-2.5 flex flex-col gap-0.5">
+                <div class="flex items-center gap-1.5">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8"
+                    stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3"
+                    width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                    <rect x="3" y="14" width="7" height="7"/></svg>
+                  <span class="text-xl font-bold text-white">${listsAffected}</span>
+                </div>
+                <span class="text-xs text-slate-400">Lists Affected</span>
+              </div>
+
+              <!-- Members Assigned -->
+              <div class="rounded-lg border border-white/10 bg-[#0b1320] px-4 py-2.5 flex flex-col gap-0.5">
+                <div class="flex items-center gap-1.5">
+                  ${icon("users", 15, "text-slate-400")}
+                  <span class="text-xl font-bold text-white">${membersAssigned}</span>
+                </div>
+                <span class="text-xs text-slate-400">Members Assigned</span>
+              </div>
+
+              <!-- Remind Owners CTA -->
+              <button id="btn-remind-all"
+                class="remind-btn ml-auto flex flex-col items-start gap-0.5 rounded-lg
+                  border border-amber-500/60 bg-amber-500/15 px-4 py-2.5
+                  text-left hover:bg-amber-500/25 transition">
+                <div class="flex items-center gap-2 text-sm font-semibold text-amber-300">
+                  ${icon("bell", 14)} Remind Owners
+                </div>
+                <span class="text-[11px] text-amber-400/70">Send reminder to owners of<br>at risk cards</span>
+              </button>
+            </div>
+          </div>
+
+          ${
+            fetchError
+              ? `
+          <div class="mx-5 mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400 shrink-0">
+            ${icon("warning", 14)} Could not fully load board data: ${escHtml(fetchError)}
+          </div>`
+              : ""
+          }
+
+          <!-- ── Toolbar ── -->
+          <div class="flex items-center gap-2 px-5 py-2.5 border-b border-white/10 shrink-0 flex-wrap">
+            <!-- Search -->
+            <div class="relative flex-1 min-w-[160px]">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">
+                ${icon("search", 14)}
+              </span>
+              <input id="search-input" type="text" placeholder="Search at risk cards…"
+                class="h-9 w-full rounded-md border border-white/10 bg-[#0b1320] pl-9 pr-3 text-sm
+                  text-white placeholder-slate-500 outline-none focus:border-amber-500/60">
+            </div>
+            <!-- List filter -->
+            <select id="list-filter"
+              class="h-9 rounded-md border border-white/10 bg-[#0b1320] px-3 text-sm text-white
+                outline-none min-w-[120px]">
+              <option value="all">All Lists</option>
+              ${uniqueLists.map((l) => `<option value="${escAttr(l)}">${escHtml(l)}</option>`).join("")}
+            </select>
+            <!-- Sort -->
+            <button id="btn-sort"
+              class="flex h-9 items-center gap-2 rounded-md border border-white/10 bg-[#0b1320]
+                px-3 text-sm text-slate-300 hover:bg-white/5 hover:text-white whitespace-nowrap">
+              ${icon("sortLines", 14)}
+              <span id="sort-label">Sort: Days Inactive</span>
+            </button>
+            <!-- Filters -->
+            <button class="flex h-9 items-center gap-2 rounded-md border border-white/10 bg-[#0b1320]
+              px-3 text-sm text-slate-300 hover:bg-white/5 hover:text-white">
+              ${icon("filter", 14)} Filters
+            </button>
+          </div>
+
+          <!-- ── Info banner ── -->
+          <div class="flex items-center justify-between gap-3 px-5 py-2.5 bg-blue-500/5
+            border-b border-blue-500/20 shrink-0">
+            <div class="flex items-start gap-2 text-sm text-slate-300">
+              ${icon("info", 15, "text-blue-400 shrink-0 mt-0.5")}
+              <div>
+                <span class="text-slate-200">These cards are approaching your stale threshold of
+                  <strong class="text-white">${threshold} days</strong>.</span>
+                <span class="text-slate-400 ml-1">Take action now to keep your board healthy!</span>
+              </div>
+            </div>
+            <button class="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-white/10
+              bg-transparent px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5 hover:text-white shrink-0">
+              ${icon("settings", 13)} Customize Threshold
+            </button>
+          </div>
+
+          <!-- ── Table ── -->
+          <div class="flex-1 overflow-y-auto scrollbar-thin">
+            <table>
+              <thead>
+                <tr class="border-b border-white/10 text-xs text-slate-500 uppercase tracking-wide">
+                  <th class="py-3 pl-4 pr-2 w-8 text-left">
+                    <input type="checkbox" id="master-check">
+                  </th>
+                  <th class="py-3 pr-3 text-left font-medium">Card</th>
+                  <th class="py-3 pr-3 text-left font-medium">List</th>
+                  <th class="py-3 pr-3 text-left font-medium">
+                    <div class="flex items-center gap-1">
+                      Days Inactive ${icon("sortLines", 11, "text-amber-400")}
+                    </div>
+                  </th>
+                  <th class="py-3 pr-3 text-left font-medium">Last Activity</th>
+                  <th class="py-3 pr-3 text-left font-medium">Assignee</th>
+                  <th class="py-3 pr-4 text-left font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="card-tbody"></tbody>
+            </table>
+          </div>
+
+          <!-- ── Bottom bar (always visible) ── -->
+          <div class="border-t border-white/10 bg-[#070e1a] shrink-0">
+            <!-- Row 1: selection actions -->
+            <div class="flex items-center gap-3 px-5 py-2.5 border-b border-white/5">
+              <span id="sel-count" class="text-sm text-slate-500 min-w-[80px]">0 selected</span>
+              <div class="h-4 w-px bg-white/10"></div>
+              <button id="btn-remind-sel"
+                class="flex items-center gap-1.5 rounded-md border border-white/10 bg-transparent
+                  px-3 py-1.5 text-xs text-slate-400 hover:bg-white/5 hover:text-white"
+                style="opacity:0.45;pointer-events:none">
+                ${icon("bell", 13)} Remind Selected
+              </button>
+              <button id="btn-move-top"
+                class="flex items-center gap-1.5 rounded-md border border-white/10 bg-transparent
+                  px-3 py-1.5 text-xs text-slate-400 hover:bg-white/5 hover:text-white"
+                style="opacity:0.45;pointer-events:none">
+                ${icon("arrowUp", 13)} Move to Top
+              </button>
+              <div class="relative ml-auto">
+                <button id="btn-more-actions"
+                  class="flex items-center gap-1.5 rounded-md border border-white/10 bg-transparent
+                    px-3 py-1.5 text-xs text-slate-400 hover:bg-white/5 hover:text-white">
+                  More Actions ${icon("sortLines", 12)}
+                </button>
+                <div id="more-actions-menu">
+                  <button>${icon("archive", 13)} Archive Selected</button>
+                  <button>${icon("label", 13)} Add Label</button>
+                  <button>${icon("move", 13)} Move to List</button>
+                  <button>${icon("x", 13)} Deselect All</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Row 2: tips + at-risk summary + pagination -->
+            <div class="flex items-start gap-0 divide-x divide-white/5 px-0">
+              <!-- Tips -->
+              <div class="flex-1 px-5 py-2.5">
+                <div class="flex items-center gap-1.5 text-xs font-semibold text-slate-300 mb-1.5">
+                  ${icon("bulb", 13, "text-amber-400")} Tips to avoid stale cards
+                </div>
+                <ul class="space-y-0.5 text-[11px] text-slate-500 list-disc list-inside">
+                  <li>Add a comment or update the card</li>
+                  <li>Move the card to another list</li>
+                  <li>Update the due date or checklist</li>
+                </ul>
+              </div>
+              <!-- At-risk summary -->
+              <div class="px-5 py-2.5 min-w-[220px]">
+                <div class="flex items-center gap-1.5 text-xs font-semibold text-amber-400 mb-1.5">
+                  ${icon("warning", 13)} At Risk cards will become stale in 1–${threshold - agingMax - 1} days
+                </div>
+                <div class="text-[11px] text-slate-500 space-y-0.5">
+                  <div>Total at risk cards: <span class="text-slate-300">${totalAtRisk}</span></div>
+                  <div>Threshold: <span class="text-slate-300">${threshold} days</span></div>
+                </div>
+                <button id="btn-manage-rules"
+                  class="mt-2 flex items-center gap-1.5 rounded-md border border-white/10 bg-transparent
+                    px-2.5 py-1 text-[11px] text-slate-400 hover:bg-white/5 hover:text-white">
+                  ${icon("settings", 11)} Manage Rules
+                </button>
+              </div>
+            </div>
+
+            <!-- Row 3: pagination -->
+            <div class="flex items-center justify-between px-5 py-2 border-t border-white/5">
+              <span id="pg-text" class="text-xs text-slate-500"></span>
+              <div class="flex items-center gap-1.5">
+                <button id="pg-prev" class="pg-btn" disabled>
+                  ${icon("chevLeft", 13)}
+                </button>
+                <div id="pg-numbers" class="flex items-center gap-1"></div>
+                <button id="pg-next" class="pg-btn">
+                  ${icon("chevRight", 13)}
+                </button>
+              </div>
+            </div>
+          </div>`;
+
+        // ── Initial render ────────────────────────────────────────────────────
+        renderRows();
+        updateBottomBar();
+
+        // ── Wire controls ─────────────────────────────────────────────────────
+
+        document.getElementById("btn-back")?.addEventListener("click", () => {
+          t.closeModal();
+          t.popup({
+            title: "Declutter – Stale Card Manager",
+            url: t.signUrl("./popup.html"),
+          });
+        });
+
+        document.getElementById("btn-close")?.addEventListener("click", () => {
+          if (typeof t.closeModal === "function") t.closeModal();
+          else t.closePopup();
+        });
+
+        document
+          .getElementById("search-input")
+          ?.addEventListener("input", (e) => {
+            searchQuery = e.target.value;
+            currentPage = 1;
+            renderRows();
+            syncMasterCheck();
+          });
+
+        document
+          .getElementById("list-filter")
+          ?.addEventListener("change", (e) => {
+            filterList = e.target.value;
+            currentPage = 1;
+            renderRows();
+            syncMasterCheck();
+          });
+
+        document.getElementById("btn-sort")?.addEventListener("click", () => {
+          sortDir = sortDir === "desc" ? "asc" : "desc";
+          document.getElementById("sort-label").textContent =
+            sortDir === "desc" ? "Sort: Days Inactive" : "Sort: Least Inactive";
+          currentPage = 1;
+          renderRows();
+          syncMasterCheck();
+        });
+
+        document
+          .getElementById("master-check")
+          ?.addEventListener("change", (e) => {
+            const cards = filteredCards().slice(
+              (currentPage - 1) * PAGE_SIZE,
+              currentPage * PAGE_SIZE,
+            );
+            cards.forEach((c) =>
+              e.target.checked ? selected.add(c.id) : selected.delete(c.id),
+            );
+            renderRows();
+            updateBottomBar();
+          });
+
+        document.getElementById("pg-prev")?.addEventListener("click", () => {
+          if (currentPage > 1) {
+            currentPage--;
+            renderRows();
+            syncMasterCheck();
+          }
+        });
+
+        document.getElementById("pg-next")?.addEventListener("click", () => {
+          if (currentPage < totalPages()) {
+            currentPage++;
+            renderRows();
+            syncMasterCheck();
+          }
+        });
+
+        document
+          .getElementById("btn-remind-all")
+          ?.addEventListener("click", () => {
+            alert(
+              `Reminding owners of all ${totalAtRisk} at-risk card(s)…\n(Wire up your notification logic here.)`,
+            );
+          });
+
+        document
+          .getElementById("btn-remind-sel")
+          ?.addEventListener("click", () => {
+            if (!selected.size) return;
+            alert(`Reminding owners of ${selected.size} selected card(s)…`);
+          });
+
+        document
+          .getElementById("btn-move-top")
+          ?.addEventListener("click", () => {
+            if (!selected.size) return;
+            alert(`Moving ${selected.size} card(s) to top of their list…`);
+          });
+
+        // More Actions dropdown toggle
+        const moreBtn = document.getElementById("btn-more-actions");
+        const moreMenu = document.getElementById("more-actions-menu");
+        moreBtn?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          moreMenu?.classList.toggle("open");
+        });
+        document.addEventListener("click", () =>
+          moreMenu?.classList.remove("open"),
+        );
+
+        // More Actions items
+        moreMenu?.querySelectorAll("button").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const label = btn.textContent.trim();
+            if (label.includes("Deselect")) {
+              selected.clear();
+              renderRows();
+              syncMasterCheck();
+              updateBottomBar();
+            } else {
+              alert(
+                `${label}: ${selected.size} card(s) selected.\n(Wire up your logic here.)`,
+              );
+            }
+            moreMenu.classList.remove("open");
+          });
+        });
+
+        document
+          .getElementById("btn-manage-rules")
+          ?.addEventListener("click", () => {
+            alert(
+              "Manage Rules: wire up navigation to your sweep rules section.",
+            );
+          });
+      }
+
+      render();
+    </script>
+  </body>
+</html>
