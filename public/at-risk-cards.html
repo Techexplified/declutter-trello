@@ -920,7 +920,7 @@
         document.getElementById("btn-sort")?.addEventListener("click", () => {
           sortDir = sortDir === "desc" ? "asc" : "desc";
           document.getElementById("sort-label").textContent =
-            sortDir === "desc" ? "Sort: Days Inactive" : "Sort: Least Inactive";
+            sortDir === "desc" ? "Sort: Oldest First" : "Sort: Newest First";
           currentPage = 1;
           renderRows();
           syncMasterCheck();
