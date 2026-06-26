@@ -343,8 +343,13 @@
 
         try {
           threshold = (await t.get("board", "shared", "staleThreshold")) || 30;
-          // Derive agingMax from threshold: at-risk window is upper ~33% before stale
-          agingMax = Math.max(Math.floor(threshold * 0.5), freshMax + 1);
+          // At-risk window: cards between freshMax+1 days and threshold-1 days
+          // Don't derive agingMax here — read it from the same stored value popup.html uses
+          agingMax =
+            (await t.get("board", "shared", "agingMax")) ||
+            Math.floor(threshold * 0.3);
+          // Safety: ensure agingMax is always at least 2 days below threshold
+          if (agingMax >= threshold - 2) agingMax = Math.max(1, threshold - 3);
         } catch {}
 
         // ── Fetch board data ──────────────────────────────────────────────────
