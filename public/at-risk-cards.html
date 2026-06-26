@@ -336,20 +336,19 @@
           return;
         }
 
-        // ── Thresholds (mirror popup.html logic) ──────────────────────────────
+        // ── Thresholds (must exactly mirror popup.html logic) ─────────────────
         let threshold = 30;
         let freshMax = 7;
         let agingMax = 14;
 
         try {
-          threshold = (await t.get("board", "shared", "staleThreshold")) || 30;
-          // At-risk window: cards between freshMax+1 days and threshold-1 days
-          // Don't derive agingMax here — read it from the same stored value popup.html uses
-          agingMax =
-            (await t.get("board", "shared", "agingMax")) ||
-            Math.floor(threshold * 0.3);
-          // Safety: ensure agingMax is always at least 2 days below threshold
-          if (agingMax >= threshold - 2) agingMax = Math.max(1, threshold - 3);
+          threshold =
+            Number(await t.get("board", "shared", "staleThreshold")) || 30;
+          // Mirror popup.html exactly: agingMax = floor(threshold * 0.6)
+          // popup.html never stores agingMax to board storage, so derive it
+          // the same way popup.html does to guarantee identical filtering.
+          freshMax = Math.floor(threshold * 0.25);
+          agingMax = Math.floor(threshold * 0.6);
         } catch {}
 
         // ── Fetch board data ──────────────────────────────────────────────────
