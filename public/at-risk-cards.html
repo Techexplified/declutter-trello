@@ -807,25 +807,8 @@
             </button>
           </div>
 
-          <!-- ── Info banner ── -->
-          <div class="flex items-center justify-between gap-3 px-5 py-2.5 bg-blue-500/5
-            border-b border-blue-500/20 shrink-0">
-            <div class="flex items-start gap-2 text-sm text-slate-300">
-              ${icon("info", 15, "text-blue-400 shrink-0 mt-0.5")}
-              <div>
-                <span class="text-slate-200">These cards are approaching your stale threshold of
-                  <strong class="text-white">${threshold} days</strong>.</span>
-                <span class="text-slate-400 ml-1">Take action now to keep your board healthy!</span>
-              </div>
-            </div>
-            <button class="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-white/10
-              bg-transparent px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5 hover:text-white shrink-0">
-              ${icon("settings", 13)} Customize Threshold
-            </button>
-          </div>
-
           <!-- ── Table ── -->
-          <div class="flex-1 overflow-y-auto scrollbar-thin">
+          <div class="flex-1 overflow-y-auto scrollbar-thin" style="min-height:120px;">
             <table>
               <thead>
                 <tr class="border-b border-white/10 text-xs text-slate-500 uppercase tracking-wide">
