@@ -616,7 +616,7 @@
                 <div class="stats-grid grid grid-cols-3 gap-3">
                   ${statCard({ iconName: "circleAlert", label: "Stale Cards", count: stale.length, sub: "Need immediate action", color: "#ef4444", btnId: "view-stale-cards" })}
                   ${statCard({ iconName: "alert", label: "At Risk Cards", count: atRisk.length, sub: "May become stale soon", color: "#f59e0b", btnId: "view-at-risk-cards" })}
-                  ${statCard({ iconName: "user", label: "Unassigned Cards", count: unassigned.length, sub: "No members assigned", color: "#a855f7" })}
+                  ${statCard({ iconName: "user", label: "Unassigned Cards", count: unassigned.length, sub: "No members assigned", color: "#a855f7", btnId: "view-unassigned-cards" })}
                 </div>
 
                 <!-- Aging Distribution -->
@@ -805,6 +805,12 @@
           .getElementById("view-at-risk-cards")
           ?.addEventListener("click", () => {
             window.location.href = t.signUrl("./at-risk-cards.html");
+          });
+
+        document
+          .getElementById("view-unassigned-cards")
+          ?.addEventListener("click", () => {
+            window.location.href = t.signUrl("./unassigned-cards.html");
           });
 
         document.getElementById("sweep")?.addEventListener("click", () => {
