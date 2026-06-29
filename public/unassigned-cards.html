@@ -523,6 +523,7 @@
               labels: c.labels ?? [],
               comments: c.badges?.comments ?? 0,
               attachments: c.badges?.attachments ?? 0,
+              lastActivity: c.dateLastActivity,
             }))
             .sort((a, b) => a.createdAt - b.createdAt);
         } catch (e) {
@@ -559,8 +560,8 @@
             })
             .sort((a, b) =>
               sortDir === "desc"
-                ? b.createdAt - a.createdAt
-                : a.createdAt - b.createdAt,
+                ? b.daysInactive - a.daysInactive
+                : a.daysInactive - b.daysInactive,
             );
         }
 
@@ -647,7 +648,7 @@
 
           if (page.length === 0) {
             tbody.innerHTML = `
-              <tr><td colspan="7"
+              <tr><td colspan="5"
                 class="py-10 text-center text-sm text-slate-500">
                 No unassigned cards match your search / filter.
               </td></tr>`;
@@ -689,18 +690,14 @@
                   ${escHtml(c.listName)}
                 </span>
               </td>
-              <!-- Created -->
+              <!-- Days Inactive -->
               <td class="py-3 pr-3">
-                <div class="text-sm text-slate-300 tabular-nums">${fmtDate(c.createdAt)}</div>
-                <div class="text-[11px] text-slate-500 mt-0.5">${c.daysInactive} days ago</div>
+                <div class="text-sm font-medium text-yellow-400 tabular-nums">${c.daysInactive} days</div>
               </td>
-              <!-- Due Date -->
+              <!-- Last Activity -->
               <td class="py-3 pr-3">
-                <div class="font-medium text-sm ${due.cls}">${due.label}</div>
-                ${due.sub ? `<div class="text-[11px] ${due.cls} mt-0.5 opacity-80">${due.sub}</div>` : ""}
+                <div class="text-sm text-slate-300">${fmtDate(c.lastActivity)}</div>
               </td>
-              <!-- Labels -->
-              <td class="py-3 pr-3">${labelChips(c.labels)}</td>
               <!-- Actions -->
               <td class="py-3 pr-4">
                 <div class="flex items-center gap-1">
@@ -1150,13 +1147,8 @@
                   </th>
                   <th class="py-3 pr-3 text-left font-medium">Card</th>
                   <th class="py-3 pr-3 text-left font-medium">List</th>
-                  <th class="py-3 pr-3 text-left font-medium">
-                    <div class="flex items-center gap-1">
-                      Created ${icon("sortLines", 11, "text-violet-400")}
-                    </div>
-                  </th>
-                  <th class="py-3 pr-3 text-left font-medium">Due Date</th>
-                  <th class="py-3 pr-3 text-left font-medium">Labels</th>
+                  <th class="py-3 pr-3 text-left font-medium">Days Inactive</th>
+                  <th class="py-3 pr-3 text-left font-medium">Last Activity</th>
                   <th class="py-3 pr-4 text-left font-medium">Actions</th>
                 </tr>
               </thead>
