@@ -606,11 +606,64 @@
 
         document
           .getElementById("btn-archive")
-          ?.addEventListener("click", () => {
+          ?.addEventListener("click", async () => {
             if (selected.size === 0) return;
-            alert(
-              `Archiving ${selected.size} selected card(s)…\n(Wire up your archive logic here.)`,
-            );
+
+            const btn = document.getElementById("btn-archive");
+            btn.disabled = true;
+            btn.innerHTML = `${icon("spin", 14, "spin")} Archiving...`;
+
+            try {
+              const token = await getToken();
+
+              // Archive every selected card
+              await Promise.all(
+                [...selected].map((cardId) =>
+                  fetch(
+                    `https://api.trello.com/1/cards/${cardId}?key=${TRELLO_APP_KEY}&token=${token}`,
+                    {
+                      method: "PUT",
+                      headers: {
+                        "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({
+                        closed: true,
+                      }),
+                    },
+                  ).then((r) => {
+                    if (!r.ok)
+                      throw new Error(`Failed to archive card ${cardId}`);
+                  }),
+                ),
+              );
+
+              // Remove archived cards from local data
+              staleCards = staleCards.filter((c) => !selected.has(c.id));
+
+              selected.clear();
+
+              totalStale = staleCards.length;
+              listsAffected = new Set(staleCards.map((c) => c.listName)).size;
+
+              // Update summary cards
+              document.querySelectorAll(
+                ".text-red-400.text-xl.font-bold",
+              )[0].textContent = totalStale;
+
+              document.querySelectorAll(
+                ".text-white.text-xl.font-bold",
+              )[1].textContent = listsAffected;
+
+              renderRows();
+              syncMasterCheck();
+              updateActionBar();
+            } catch (err) {
+              console.error(err);
+              alert("Failed to archive one or more cards.");
+            } finally {
+              btn.disabled = false;
+              btn.innerHTML = `${icon("archive", 14)} Archive`;
+            }
           });
 
         document
