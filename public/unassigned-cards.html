@@ -820,17 +820,12 @@
 
           const pop = document.createElement("div");
           pop.className = "member-popover";
-          // Position below the button by default; flip above if not enough
-          // room beneath it inside the modal viewport.
-          const spaceBelow = window.innerHeight - rect.bottom;
-          const popHeight = 320;
-          if (spaceBelow < popHeight && rect.top > popHeight) {
-            pop.style.bottom = `${window.innerHeight - rect.top + 6}px`;
-          } else {
-            pop.style.top = `${rect.bottom + 6}px`;
-          }
-          const left = Math.min(rect.left, window.innerWidth - 256);
-          pop.style.left = `${Math.max(8, left)}px`;
+          // Render invisibly first so we can measure its real height before
+          // deciding where to place it — avoids guessing a fixed height that
+          // may not match the actual member-list length.
+          pop.style.visibility = "hidden";
+          pop.style.top = "0px";
+          pop.style.left = "0px";
 
           pop.innerHTML = `
             <div class="member-popover-header">
@@ -857,6 +852,46 @@
 
           document.body.appendChild(pop);
           activePopover = pop;
+
+          // Now that it's in the DOM, measure its real rendered size.
+          const popRect = pop.getBoundingClientRect();
+          const popHeight = popRect.height;
+          const popWidth = popRect.width || 240;
+          const viewportH =
+            document.documentElement.clientHeight || window.innerHeight;
+          const viewportW =
+            document.documentElement.clientWidth || window.innerWidth;
+          const margin = 8;
+
+          const spaceBelow = viewportH - rect.bottom;
+          const spaceAbove = rect.top;
+
+          let topPos;
+          if (spaceBelow >= popHeight + margin || spaceBelow >= spaceAbove) {
+            // Enough room below, or below still has more room than above —
+            // place below and let it clamp to the viewport if it's taller
+            // than the available space (scroll happens inside the popover).
+            topPos = rect.bottom + 6;
+          } else {
+            // Not enough room below — place above the anchor instead.
+            topPos = rect.top - popHeight - 6;
+          }
+          // Final clamp: never let the popover render above or below the
+          // visible iframe viewport, regardless of anchor position.
+          topPos = Math.max(
+            margin,
+            Math.min(topPos, viewportH - popHeight - margin),
+          );
+
+          let leftPos = Math.min(rect.left, viewportW - popWidth - margin);
+          leftPos = Math.max(margin, leftPos);
+
+          pop.style.top = `${topPos}px`;
+          pop.style.left = `${leftPos}px`;
+          // Cap height so it never exceeds the viewport even on very short
+          // iframes with many members — the internal list already scrolls.
+          pop.style.maxHeight = `${Math.min(320, viewportH - margin * 2)}px`;
+          pop.style.visibility = "visible";
 
           const doneBtn = pop.querySelector(".member-popover-done");
           const cancelBtn = pop.querySelector(".member-popover-cancel");
