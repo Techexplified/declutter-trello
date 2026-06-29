@@ -532,7 +532,7 @@
 
           if (page.length === 0) {
             tbody.innerHTML = `
-              <tr><td colspan="7"
+              <tr><td colspan="6"
                 class="py-10 text-center text-sm text-slate-500">
                 No at-risk cards match your search / filter.
               </td></tr>`;
@@ -584,8 +584,6 @@
                 <div class="text-sm text-slate-300 tabular-nums">${fmtDate(c.lastActivity)}</div>
                 <div class="text-[11px] text-slate-500 mt-0.5">(${actLabel(c.id)})</div>
               </td>
-              <!-- Assignee -->
-              <td class="py-3 pr-3">${assigneeChip(c.idMembers)}</td>
               <!-- Actions -->
                 <td class="py-3 pr-4">
                     <div class="flex items-center gap-1">
@@ -801,7 +799,6 @@
                     </div>
                   </th>
                   <th class="py-3 pr-3 text-left font-medium">Last Activity</th>
-                  <th class="py-3 pr-3 text-left font-medium">Assignee</th>
                   <th class="py-3 pr-4 text-left font-medium">Actions</th>
                 </tr>
               </thead>
