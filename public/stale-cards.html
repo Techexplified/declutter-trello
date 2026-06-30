@@ -466,14 +466,7 @@
                 <span class="text-xs text-slate-400">Lists Affected</span>
               </div>
 
-              <!-- Sweep All -->
-              <button
-                id="btn-sweep-all"
-                class="sweep-btn flex h-full items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500"
-              >
-                ${icon("sweep", 15)}
-                Sweep All Stale Cards
-              </button>
+             <div></div>
 
             </div>
           </div>
@@ -544,10 +537,14 @@
                   text-sm text-slate-300 hover:bg-white/5 hover:text-white">
                 ${icon("archive", 14)} Archive
               </button>
-              <button id="btn-deselect"
-                class="flex items-center gap-2 rounded-md border border-white/10 bg-transparent px-3 py-1.5
-                  text-sm text-slate-300 hover:bg-white/5 hover:text-white">
-                ${icon("x", 14)} Deselect
+              
+              <!-- Sweep All -->
+              <button
+                id="btn-sweep-all"
+                class="sweep-btn flex h-full items-center justify-center gap-2 rounded-md bg-red-600 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-red-500"
+              >
+                ${icon("sweep", 15)}
+                Sweep All Stale Cards
               </button>
             </div>
           </div>`;
