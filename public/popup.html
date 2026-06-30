@@ -599,14 +599,14 @@
                       <div class="mt-4 text-xs text-slate-400">Last updated: ${updatedAt}</div>
                     </div>
 
-                    <!-- Sweep Rules (mini) -->
-                    <div class="rounded-lg border border-white/10 bg-[#07101b] p-4">
-                      <h3 class="text-sm font-bold text-white">Sweep Rules</h3>
-                      <label class="mt-2 block text-xs text-slate-300">Days before a card is considered stale</label>
-                      <div class="mt-2 flex items-center gap-2">
-                        <input id="thresholdInputMini" type="number" value="${threshold}" min="1" max="365"
-                          class="h-8 w-20 rounded-md border border-white/10 bg-[#0b1320] px-2 text-sm text-white outline-none">
-                        <span class="text-xs text-slate-300">days</span>
+                    <!-- Sweep Rules (compact) -->
+                    <div class="rounded-lg border border-white/10 bg-[#07101b] p-5 h-full flex flex-col justify-center">
+                      <h2 class="text-base font-bold text-white">Sweep Rules</h2>
+                      <label class="mt-3 block text-xs text-slate-300 leading-snug">Days before a card is considered stale</label>
+                      <div class="mt-3 flex items-center gap-3">
+                        <input id="thresholdInput" type="number" value="${threshold}" min="1" max="365"
+                          class="h-9 w-24 rounded-md border border-white/10 bg-[#0b1320] px-3 text-sm text-white outline-none">
+                        <span class="text-sm text-slate-300">days</span>
                       </div>
                     </div>
 
@@ -635,7 +635,7 @@
                 </section>
 
                 <!-- Sweep Rules -->
-                <section class="rules-grid grid grid-cols-[1fr_1.15fr_1fr] rounded-lg border border-white/10 bg-[#0b1320] p-4">
+                <!-- <section class="rules-grid grid grid-cols-[1fr_1.15fr_1fr] rounded-lg border border-white/10 bg-[#0b1320] p-4">
                   <div class="rule-section border-r border-white/10 pr-5">
                     <h2 class="text-base font-bold text-white">Sweep Rules</h2>
                     <label class="mt-4 block text-xs text-slate-300">Days before a card is considered stale</label>
@@ -671,7 +671,7 @@
                       <option>Daily</option><option>Weekly</option><option>Monthly</option>
                     </select>
                   </div>
-                </section>
+                </section> -->
 
                 <!-- Weekly Cleanup Summary -->
                 <!--<section class="rounded-lg border border-white/10 bg-[#0b1320] p-4">
