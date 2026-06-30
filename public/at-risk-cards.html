@@ -230,6 +230,21 @@
         });
       }
 
+      function trelloPost(path, token, body) {
+        const sep = path.includes("?") ? "&" : "?";
+        return fetch(
+          `https://api.trello.com/1${path}${sep}key=${TRELLO_APP_KEY}&token=${token}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          },
+        ).then((r) => {
+          if (!r.ok) throw new Error(`Trello API ${r.status}: ${path}`);
+          return r.json();
+        });
+      }
+
       const daysSince = (d) =>
         Math.floor((Date.now() - new Date(d).getTime()) / 86_400_000);
 
@@ -404,12 +419,13 @@
             allMemberIds.map(async (id) => {
               try {
                 const m = await trelloFetch(
-                  `/members/${id}?fields=fullName,initials`,
+                  `/members/${id}?fields=fullName,initials,username`,
                   token,
                 );
                 memberMap[id] = {
                   name: m.fullName ?? "Unknown",
                   initials: m.initials ?? "?",
+                  username: m.username ?? null,
                   avIdx: avIdx++,
                 };
               } catch {
@@ -532,7 +548,7 @@
 
           if (page.length === 0) {
             tbody.innerHTML = `
-              <tr><td colspan="6"
+              <tr><td colspan="7"
                 class="py-10 text-center text-sm text-slate-500">
                 No at-risk cards match your search / filter.
               </td></tr>`;
@@ -584,6 +600,8 @@
                 <div class="text-sm text-slate-300 tabular-nums">${fmtDate(c.lastActivity)}</div>
                 <div class="text-[11px] text-slate-500 mt-0.5">(${actLabel(c.id)})</div>
               </td>
+              <!-- Assignee -->
+              <td class="py-3 pr-3">${assigneeChip(c.idMembers)}</td>
               <!-- Actions -->
                 <td class="py-3 pr-4">
                     <div class="flex items-center gap-1">
@@ -621,6 +639,57 @@
               await t.closeModal();
             });
           });
+        }
+
+        // ── Remind Owners (posts @mention comments → real Trello notifications) ──
+        async function remindOwners(cards, triggerBtn) {
+          const targets = cards.filter((c) => c.idMembers?.length);
+          if (!targets.length) {
+            alert(
+              "None of the selected cards have an assigned member to remind.",
+            );
+            return;
+          }
+
+          const originalHtml = triggerBtn.innerHTML;
+          triggerBtn.disabled = true;
+          triggerBtn.style.pointerEvents = "none";
+          triggerBtn.style.opacity = "0.6";
+          triggerBtn.innerHTML = `
+            <svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+            </svg>
+            Sending…`;
+
+          let sent = 0;
+          let failed = 0;
+          for (const c of targets) {
+            const mentions = c.idMembers
+              .map((id) => memberMap[id]?.username)
+              .filter(Boolean)
+              .map((u) => `@${u}`)
+              .join(" ");
+            if (!mentions) continue;
+            const text = `${mentions} this card has been inactive for ${c.daysInactive} day(s) and is at risk of going stale. Please take action.`;
+            try {
+              await trelloPost(`/cards/${c.id}/actions/comments`, token, {
+                text,
+              });
+              sent++;
+            } catch (e) {
+              failed++;
+            }
+          }
+
+          triggerBtn.disabled = false;
+          triggerBtn.style.pointerEvents = "";
+          triggerBtn.style.opacity = "";
+          triggerBtn.innerHTML = originalHtml;
+
+          alert(
+            `Reminders sent: ${sent}${failed ? `, failed: ${failed}` : ""}`,
+          );
         }
 
         // ── Pagination renderer ───────────────────────────────────────────────
@@ -799,6 +868,7 @@
                     </div>
                   </th>
                   <th class="py-3 pr-3 text-left font-medium">Last Activity</th>
+                  <th class="py-3 pr-3 text-left font-medium">Assignee</th>
                   <th class="py-3 pr-4 text-left font-medium">Actions</th>
                 </tr>
               </thead>
@@ -943,17 +1013,16 @@
 
         document
           .getElementById("btn-remind-all")
-          ?.addEventListener("click", () => {
-            alert(
-              `Reminding owners of all ${totalAtRisk} at-risk card(s)…\n(Wire up your notification logic here.)`,
-            );
+          ?.addEventListener("click", (e) => {
+            remindOwners(atRiskCards, e.currentTarget);
           });
 
         document
           .getElementById("btn-remind-sel")
-          ?.addEventListener("click", () => {
+          ?.addEventListener("click", (e) => {
             if (!selected.size) return;
-            alert(`Reminding owners of ${selected.size} selected card(s)…`);
+            const cards = atRiskCards.filter((c) => selected.has(c.id));
+            remindOwners(cards, e.currentTarget);
           });
 
         document
