@@ -136,7 +136,7 @@
     <script type="module">
       const t = TrelloPowerUp.iframe();
       const TRELLO_APP_KEY = "2082693e62994dce1c1cba5f43e4711b";
-      const DONE_LIST_PATTERN = /\b(done|completed|closed|finished)\b/i;
+      const DONE_LIST_PATTERN = /\b(done|completed|closed|finished|stale)\b/i;
 
       // ── Helpers ─────────────────────────────────────────────────────────────
       function getToken() {
@@ -233,10 +233,12 @@
         let listsAffected = 0;
         let fetchError = null;
         let threshold = 30;
+        let boardId = null;
+        let openLists = []; // raw { id, name } list of open lists on the board
 
         try {
           threshold = (await t.get("board", "shared", "staleThreshold")) || 30;
-          const boardId = await t.board("id").then((b) => b.id);
+          boardId = await t.board("id").then((b) => b.id);
 
           const [lists, allCards] = await Promise.all([
             trelloFetch(
@@ -248,6 +250,7 @@
               token,
             ),
           ]);
+          openLists = lists;
 
           const listMap = Object.fromEntries(lists.map((l) => [l.id, l.name]));
           const doneIds = new Set(
@@ -594,14 +597,99 @@
 
         document
           .getElementById("btn-sweep-all")
-          ?.addEventListener("click", () => {
+          ?.addEventListener("click", async () => {
             if (staleCards.length === 0) {
               alert("No stale cards to sweep!");
               return;
             }
-            alert(
-              `Sweeping all ${staleCards.length} stale card(s)…\n(Wire up your sweep logic here.)`,
-            );
+            if (!boardId) {
+              alert(
+                "Could not determine the current board — try reopening Declutter.",
+              );
+              return;
+            }
+
+            const btn = document.getElementById("btn-sweep-all");
+            const originalLabel = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = `${icon("spin", 15, "spin")} Sweeping...`;
+
+            try {
+              const freshToken = await getToken();
+
+              // Find an existing "Stale" list on this board (case-insensitive,
+              // exact name match) to avoid creating duplicates on repeated
+              // sweeps; otherwise create a new one.
+              let staleListId = openLists.find(
+                (l) => l.name.trim().toLowerCase() === "stale",
+              )?.id;
+
+              if (!staleListId) {
+                const newList = await fetch(
+                  `https://api.trello.com/1/lists?key=${TRELLO_APP_KEY}&token=${freshToken}` +
+                    `&idBoard=${boardId}&name=${encodeURIComponent("Stale")}`,
+                  { method: "POST" },
+                ).then((r) => {
+                  if (!r.ok) throw new Error("Failed to create Stale list");
+                  return r.json();
+                });
+                staleListId = newList.id;
+                openLists.push({ id: staleListId, name: "Stale" });
+              }
+
+              // Move every stale card into the Stale list.
+              const cardIds = staleCards.map((c) => c.id);
+              const results = await Promise.allSettled(
+                cardIds.map((cardId) =>
+                  fetch(
+                    `https://api.trello.com/1/cards/${cardId}?key=${TRELLO_APP_KEY}&token=${freshToken}` +
+                      `&idList=${staleListId}`,
+                    { method: "PUT" },
+                  ).then((r) => {
+                    if (!r.ok) throw new Error(`Failed to move card ${cardId}`);
+                  }),
+                ),
+              );
+
+              const failedCount = results.filter(
+                (r) => r.status === "rejected",
+              ).length;
+              const movedIds = new Set(
+                cardIds.filter((_, i) => results[i].status === "fulfilled"),
+              );
+
+              // Remove successfully-moved cards from local state.
+              staleCards = staleCards.filter((c) => !movedIds.has(c.id));
+              [...movedIds].forEach((id) => selected.delete(id));
+
+              totalStale = staleCards.length;
+              listsAffected = new Set(staleCards.map((c) => c.listName)).size;
+
+              document.querySelectorAll(
+                ".text-red-400.text-xl.font-bold",
+              )[0].textContent = totalStale;
+              document.querySelectorAll(
+                ".text-white.text-xl.font-bold",
+              )[1].textContent = listsAffected;
+
+              renderRows();
+              syncMasterCheck();
+              updateActionBar();
+
+              if (failedCount > 0) {
+                alert(
+                  `Moved ${movedIds.size} card(s) to "Stale". ${failedCount} card(s) failed to move — please check them directly on Trello.`,
+                );
+              }
+            } catch (err) {
+              console.error(err);
+              alert(
+                "Failed to sweep stale cards — could not create or find the Stale list.",
+              );
+            } finally {
+              btn.disabled = false;
+              btn.innerHTML = originalLabel;
+            }
           });
 
         document
