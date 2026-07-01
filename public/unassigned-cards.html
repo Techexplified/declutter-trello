@@ -321,7 +321,7 @@
       const daysSince = (d) =>
         Math.floor((Date.now() - new Date(d).getTime()) / 86_400_000);
 
-      // Trello card ids are Mongo ObjectIds — the first 8 hex chars encode the
+      // Trello card id s are Mongo ObjectIds — the first 8 hex chars encode the
       // creation timestamp (seconds since epoch). No extra API call needed.
       function createdFromId(id) {
         return new Date(parseInt(id.slice(0, 8), 16) * 1000);
