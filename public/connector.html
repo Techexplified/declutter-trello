@@ -11,42 +11,61 @@
 
       function getDeclutterModalHeight() {
         var availableHeight =
-          (window.screen && window.screen.availHeight) || window.innerHeight || 680;
+          (window.screen && window.screen.availHeight) ||
+          window.innerHeight ||
+          680;
         return Math.max(420, Math.min(620, availableHeight - 220));
       }
 
-      TrelloPowerUp.initialize({
-        "board-buttons": function (t, options) {
-          return [
-            {
-              icon: {
-                dark: BASE_URL + "/images/icon-dark.svg",
-                light: BASE_URL + "/images/icon-light.svg",
-              },
-              text: "Declutter",
-              condition: "always",
-              callback: function (t) {
-                var height = getDeclutterModalHeight();
-
-                if (typeof t.modal === "function") {
-                  return t.modal({
+      TrelloPowerUp.initialize(
+        {
+          "board-buttons": function (t, options) {
+            return [
+              {
+                icon: {
+                  dark: BASE_URL + "/images/icon-dark.svg",
+                  light: BASE_URL + "/images/icon-light.svg",
+                },
+                text: "Declutter",
+                condition: "always",
+                callback: function (t) {
+                  var height = getDeclutterModalHeight();
+                  if (typeof t.modal === "function") {
+                    return t.modal({
+                      title: "Declutter \u2013 Stale Card Manager",
+                      url: BASE_URL + "/popup.html",
+                      height: height,
+                      fullscreen: false,
+                    });
+                  }
+                  return t.popup({
                     title: "Declutter \u2013 Stale Card Manager",
                     url: BASE_URL + "/popup.html",
                     height: height,
-                    fullscreen: false,
                   });
-                }
-
-                return t.popup({
-                  title: "Declutter \u2013 Stale Card Manager",
-                  url: BASE_URL + "/popup.html",
-                  height: height,
-                });
+                },
               },
-            },
-          ];
+            ];
+          },
+
+          "authorization-status": function (t, options) {
+            return t
+              .getRestApi()
+              .isAuthorized()
+              .then(function (isAuthorized) {
+                return { authorized: isAuthorized };
+              });
+          },
+
+          "show-authorization": function (t, options) {
+            return t.getRestApi().authorize({ scope: "read,write" });
+          },
         },
-      });
+        {
+          appKey: "2082693e62994dce1c1cba5f43e4711b",
+          appName: "Declutter",
+        },
+      );
     </script>
   </head>
   <body></body>
