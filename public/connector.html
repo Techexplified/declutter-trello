@@ -49,16 +49,26 @@
           },
 
           "authorization-status": function (t, options) {
-            return t
-              .getRestApi()
-              .isAuthorized()
-              .then(function (isAuthorized) {
-                return { authorized: isAuthorized };
-              });
+            return t.get("member", "private", "token").then(function (token) {
+              return { authorized: !!token };
+            });
           },
 
           "show-authorization": function (t, options) {
-            return t.getRestApi().authorize({ scope: "read,write" });
+            return t
+              .authorize(
+                `https://trello.com/1/authorize?expiration=never&name=Declutter&scope=read,write&response_type=token&key=2082693e62994dce1c1cba5f43e4711b&return_url=${encodeURIComponent(
+                  window.location.origin + "/auth.html",
+                )}`,
+                {
+                  height: 680,
+                  width: 580,
+                  validToken: (token) => token && token.length > 0,
+                },
+              )
+              .then(function (token) {
+                return t.set("member", "private", "token", token);
+              });
           },
         },
         {
