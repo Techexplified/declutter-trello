@@ -13,7 +13,11 @@ TrelloPowerUp.initialize({
             },
             text: "Authorize Declutter",
             callback: function (t) {
-              return t.showAuthorization();
+              return t.popup({
+                title: "Authorize Account",
+                url: "./auth.html", // <--- Updated to match your file name
+                height: 140,
+              });
             },
           },
         ];
@@ -28,7 +32,7 @@ TrelloPowerUp.initialize({
           text: "Declutter",
           callback: function (t) {
             return t.modal({
-              title: "Declutter",
+              title: "Declutter – Stale Card Manager",
               url: BASE_URL + "/popup.html",
               height: 400,
             });
@@ -37,15 +41,17 @@ TrelloPowerUp.initialize({
       ];
     });
   },
+
   "authorization-status": function (t, options) {
     return t.get("member", "private", "token").then(function (token) {
       return { authorized: !!token };
     });
   },
+
   "show-authorization": function (t, options) {
     return t.popup({
       title: "Authorize Declutter",
-      url: "./authorize.html",
+      url: "./auth.html", // <--- Updated to match your file name
       height: 140,
     });
   },
