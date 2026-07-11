@@ -1,4 +1,3 @@
-// connector.js
 var BASE_URL = "https://declutter-trello.vercel.app";
 
 TrelloPowerUp.initialize({
