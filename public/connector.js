@@ -24,4 +24,13 @@ TrelloPowerUp.initialize({
       .get("member", "private", "token")
       .then((token) => ({ authorized: !!token }));
   },
+
+  // ✨ ADD THIS MISSING SECTION SO THE SETTINGS LINK WORKS
+  "show-authorization": function (t, options) {
+    return t.modal({
+      title: "Authorize Declutter Account",
+      url: BASE_URL + "/popup.html", // Directs them straight to your popup.html to trigger auth!
+      height: 420,
+    });
+  },
 });
