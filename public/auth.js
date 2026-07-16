@@ -1,0 +1,11 @@
+const token = new URLSearchParams(window.location.hash.substring(1)).get(
+  "token",
+);
+
+if (token && window.opener && typeof window.opener.authorize === "function") {
+  window.opener.authorize(token);
+  window.close();
+} else {
+  document.body.innerHTML =
+    "<h3>Authorization failed</h3><p>Token or opener not found.</p>";
+}

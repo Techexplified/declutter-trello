@@ -1,0 +1,710 @@
+const t = TrelloPowerUp.iframe();
+const TRELLO_APP_KEY = "2082693e62994dce1c1cba5f43e4711b";
+
+// ─── Done-list name detection ────────────────────────────────────────────
+const DONE_LIST_PATTERN = /\b(done|completed|closed|finished|stale)\b/i;
+
+// ─── Auth helpers ────────────────────────────────────────────────────────
+function getToken() {
+  return t.get("member", "private", "token");
+}
+
+function saveToken(token) {
+  return t.set("member", "private", "token", token);
+}
+
+function authorizeWithTrello() {
+  return t
+    .authorize(
+      `https://trello.com/1/authorize?expiration=never&name=Declutter&scope=read,write&response_type=token&key=${TRELLO_APP_KEY}&return_url=${encodeURIComponent(
+        `${window.location.origin}/auth.html`,
+      )}`,
+      {
+        height: 680,
+        width: 580,
+        validToken: (token) => token && token.length > 0,
+      },
+    )
+    .then((token) => saveToken(token).then(() => token));
+}
+
+// ─── Trello REST helper ──────────────────────────────────────────────────
+function trelloFetch(path, token) {
+  const sep = path.includes("?") ? "&" : "?";
+  return fetch(
+    `https://api.trello.com/1${path}${sep}key=${TRELLO_APP_KEY}&token=${token}`,
+  ).then((r) => {
+    if (!r.ok) throw new Error(`Trello API ${r.status}: ${path}`);
+    return r.json();
+  });
+}
+
+// ─── Date util ───────────────────────────────────────────────────────────
+function daysSince(dateStr) {
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000);
+}
+
+// ─── Health formula ───────────────────────────────────────────────────────
+// A card is Healthy only if ALL three conditions are met:
+//   ✅ Not Stale  ✅ Not At Risk  ✅ Assigned to at least one member
+// Health Score = (Healthy Cards / Total Active Cards) × 100
+function computeHealthScore(allCards, staleCards, atRiskCards, doneListIds) {
+  const total = allCards.length;
+
+  if (total === 0) return 100;
+
+  const staleIds = new Set(staleCards.map((c) => c.id));
+  const atRiskIds = new Set(atRiskCards.map((c) => c.id));
+
+  const healthyCount = allCards.filter((card) => {
+    // Done cards are always healthy
+    if (doneListIds.has(card.idList)) return true;
+
+    // Active cards must satisfy all health conditions
+    return (
+      !staleIds.has(card.id) &&
+      !atRiskIds.has(card.id) &&
+      card.idMembers?.length > 0
+    );
+  }).length;
+
+  return Math.round((healthyCount / total) * 100);
+}
+
+function healthCategory(score) {
+  if (score >= 90) return { label: "Excellent", color: "#22c55e" };
+  if (score >= 75) return { label: "Healthy", color: "#22c55e" };
+  if (score >= 60) return { label: "Needs Attention", color: "#facc15" };
+  if (score >= 40) return { label: "Poor", color: "#f97316" };
+  return { label: "Critical", color: "#ef4444" };
+}
+
+// ─── Health trend storage ────────────────────────────────────────────────
+// Stores an array of { date: ISO-string, score: number } on the board.
+// We keep at most 8 entries (one per day). On each load we append today's
+// score (or overwrite if we already recorded today).
+const TREND_KEY = "healthTrend";
+
+async function loadTrendHistory() {
+  try {
+    const raw = await t.get("board", "shared", TREND_KEY);
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveTrendHistory(history) {
+  try {
+    await t.set("board", "shared", TREND_KEY, history);
+  } catch (e) {
+    console.warn("Could not save trend history:", e);
+  }
+}
+
+// Returns { history: [...], trend: number }
+// trend = currentScore - score 7 days ago (null if no prior data)
+async function updateTrend(currentScore) {
+  let history = await loadTrendHistory();
+  const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+  // Remove today's entry if it already exists (we overwrite it)
+  history = history.filter((e) => e.date !== todayStr);
+
+  // Append today
+  history.push({ date: todayStr, score: currentScore });
+
+  // Keep only the last 8 days
+  history.sort((a, b) => a.date.localeCompare(b.date));
+  if (history.length > 8) history = history.slice(history.length - 8);
+
+  await saveTrendHistory(history);
+
+  // Find entry closest to 7 days ago
+  const sevenDaysAgoStr = new Date(Date.now() - 7 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+
+  // Pick the oldest entry that is on or before sevenDaysAgoStr
+  const priorEntry = [...history]
+    .reverse()
+    .find((e) => e.date <= sevenDaysAgoStr);
+
+  const trend =
+    priorEntry !== undefined ? currentScore - priorEntry.score : null;
+
+  return { history, trend };
+}
+
+// ─── SVG helpers ─────────────────────────────────────────────────────────
+function circle(value, color, size = 104, stroke = 10) {
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  return `
+          <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" class="-rotate-90">
+            <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="#ffffff12" stroke-width="${stroke}"></circle>
+            <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-dasharray="${circ}" stroke-dashoffset="${circ - (value / 100) * circ}" stroke-linecap="round"></circle>
+          </svg>`;
+}
+
+function icon(name, size = 16, className = "") {
+  const attrs = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${className}"`;
+  const paths = {
+    brush:
+      '<path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 0 1 4.03 4.03L13.1 15.94"></path><path d="M7.07 14A3.99 3.99 0 0 0 3 18c0 1 0 3-2 3 0 0 4 0 6-2a3.99 3.99 0 0 0 .07-5Z"></path>',
+    refresh:
+      '<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"></path><path d="M16 16h5v5"></path>',
+    x: '<path d="M18 6 6 18"></path><path d="m6 6 12 12"></path>',
+    check:
+      '<path d="M9 12l2 2 4-4"></path><circle cx="12" cy="12" r="10"></circle>',
+    alert:
+      '<path d="M12 9v4"></path><path d="M12 17h.01"></path><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"></path>',
+    circleAlert:
+      '<circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path>',
+    user: '<path d="M18 20a6 6 0 0 0-12 0"></path><circle cx="12" cy="10" r="4"></circle>',
+    arrow: '<path d="M5 12h14"></path><path d="m12 5 7 7-7 7"></path>',
+    info: '<circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4"></path><path d="M12 8h.01"></path>',
+    spark:
+      '<path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3Z"></path><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z"></path>',
+    help: '<circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 1 1 5.82 1c0 2-3 2-3 4"></path><path d="M12 17h.01"></path>',
+    chart:
+      '<path d="M3 3v18h18"></path><path d="M18 17V9"></path><path d="M13 17V5"></path><path d="M8 17v-3"></path>',
+    clock:
+      '<circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path>',
+    rotate:
+      '<path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 3v6h-6"></path>',
+    trendUp:
+      '<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline>',
+    trendDown:
+      '<polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline><polyline points="17 18 23 18 23 12"></polyline>',
+    trendFlat: '<line x1="2" y1="12" x2="22" y2="12"></line>',
+  };
+  return `<svg ${attrs}>${paths[name] || ""}</svg>`;
+}
+
+function statCard({ iconName, label, count, sub, color, btnId }) {
+  return `
+          <div class="rounded-lg border border-white/10 bg-[#0f1724] p-4">
+            <div class="flex items-center gap-2 text-sm font-medium text-white">
+              <span class="flex h-6 w-6 items-center justify-center rounded-full" style="background:${color}22;color:${color}">${icon(iconName, 17)}</span>
+              ${label}
+            </div>
+            <div class="mt-2 text-3xl font-bold leading-none" style="color:${color}">${count}</div>
+            <div class="mt-1 text-xs text-slate-300">${sub}</div>
+            <button ${btnId ? `id="${btnId}"` : ""} class="mt-3 flex h-7 w-full items-center justify-center gap-2 rounded-md border bg-transparent text-xs font-medium hover:bg-white/5" style="border-color:${color}80;color:${color}">
+              View All ${icon("arrow", 13)}
+            </button>
+          </div>`;
+}
+
+function ageBar(label, color, count, max) {
+  return `
+          <div class="grid grid-cols-[150px_1fr_38px] items-center gap-3">
+            <div class="flex items-center gap-2 text-sm text-slate-300"><span class="h-3 w-3 rounded-full" style="background:${color}"></span>${label}</div>
+            <div class="h-2.5 overflow-hidden rounded-full bg-white/10"><div class="h-full rounded-full" style="background:${color};width:${Math.min(100, max > 0 ? (count / max) * 100 : 0)}%"></div></div>
+            <div class="text-right text-sm tabular-nums text-slate-300">${count}</div>
+          </div>`;
+}
+
+function donut(fresh, aging, atRisk, stale, total) {
+  const segments = [
+    [fresh, "#22c55e"],
+    [aging, "#facc15"],
+    [atRisk, "#f97316"],
+    [stale, "#ef4444"],
+  ];
+  let offset = 25;
+  const rings = segments
+    .map(([value, color]) => {
+      const dash = total ? (value / total) * 100 : 0;
+      const ring = `<circle cx="21" cy="21" r="15.915" fill="transparent" stroke="${color}" stroke-width="7" stroke-dasharray="${dash} ${100 - dash}" stroke-dashoffset="${offset}"></circle>`;
+      offset -= dash;
+      return ring;
+    })
+    .join("");
+  return `
+          <div class="relative h-28 w-28 shrink-0">
+            <svg class="-rotate-90" viewBox="0 0 42 42">
+              <circle cx="21" cy="21" r="15.915" fill="transparent" stroke="#ffffff10" stroke-width="7"></circle>
+              ${rings}
+            </svg>
+            <div class="absolute inset-0 flex flex-col items-center justify-center">
+              <span class="text-2xl font-bold leading-none text-white">${total}</span>
+              <span class="text-[11px] text-slate-300">Total Cards</span>
+            </div>
+          </div>`;
+}
+
+// ─── Sparkline from trend history ────────────────────────────────────────
+function sparkline(history) {
+  if (!history || history.length < 2) {
+    // Not enough data — render a flat neutral line
+    return `<polyline points="12,35 138,35" fill="none" stroke="#64748b" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"></polyline>`;
+  }
+
+  const W = 150,
+    H = 70,
+    PAD = 12;
+  const scores = history.map((e) => e.score);
+  const minS = Math.min(...scores);
+  const maxS = Math.max(...scores);
+  const range = maxS - minS || 1;
+
+  const pts = scores.map((s, i) => {
+    const x = PAD + (i / (scores.length - 1)) * (W - PAD * 2);
+    const y = H - PAD - ((s - minS) / range) * (H - PAD * 2);
+    return [Math.round(x), Math.round(y)];
+  });
+
+  const polyPts = pts.map((p) => p.join(",")).join(" ");
+  const fillPts = [
+    `${pts[0][0]},${H - PAD}`,
+    ...pts.map((p) => p.join(",")),
+    `${pts[pts.length - 1][0]},${H - PAD}`,
+  ].join(" ");
+
+  const dots = pts
+    .map(
+      ([x, y]) => `<circle cx="${x}" cy="${y}" r="4" fill="#22c55e"></circle>`,
+    )
+    .join("");
+
+  return `
+          <defs>
+            <linearGradient id="sparkFill" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="#22c55e66"></stop>
+              <stop offset="100%" stop-color="#22c55e00"></stop>
+            </linearGradient>
+          </defs>
+          <polygon points="${fillPts}" fill="url(#sparkFill)"></polygon>
+          <polyline points="${polyPts}" fill="none" stroke="#22c55e" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"></polyline>
+          ${dots}`;
+}
+
+function trendLabel(trend) {
+  if (trend === null)
+    return `<span class="text-slate-400">No prior data</span>`;
+  if (trend > 0) return `<span class="text-green-400">↑ up ${trend}</span>`;
+  if (trend < 0)
+    return `<span class="text-red-400">↓ down ${Math.abs(trend)}</span>`;
+  return `<span class="text-slate-300">→ no change</span>`;
+}
+
+// ─── Sign-in screen ───────────────────────────────────────────────────────
+function renderSignIn(root, onAuth) {
+  root.innerHTML = `
+          <div class="flex min-h-[420px] flex-col items-center justify-center px-8 text-center">
+            <div class="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/25">${icon("brush", 34)}</div>
+            <h1 class="text-2xl font-bold text-white">Welcome to Declutter</h1>
+            <p class="mt-2 max-w-md text-sm text-slate-400">Keep your Trello boards clean and healthy. Detect stale cards, track board health, and sweep old cards automatically.</p>
+            <button id="signin" class="mt-6 rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white hover:bg-blue-500">Sign in with Trello</button>
+          </div>`;
+  document.getElementById("signin").addEventListener("click", async () => {
+    const token = await authorizeWithTrello();
+    onAuth(token);
+  });
+}
+
+// ─── Main dashboard ───────────────────────────────────────────────────────
+async function renderDashboard(root, token) {
+  // Show spinner
+  root.innerHTML = `
+          <div class="flex h-[680px] items-center justify-center flex-col gap-3">
+            <div class="h-9 w-9 animate-spin rounded-full border-2 border-blue-500/30 border-t-blue-500"></div>
+            <p class="text-sm text-slate-400">Loading board data…</p>
+          </div>`;
+
+  // ── 1. Fetch current board's lists + cards ──────────────────────────────
+  // Load threshold from board storage (falls back to 30 if not set)
+  let threshold = 30;
+  try {
+    const storedThreshold = await t.get("board", "shared", "staleThreshold");
+    if (
+      storedThreshold &&
+      Number.isFinite(+storedThreshold) &&
+      +storedThreshold > 0
+    ) {
+      threshold = +storedThreshold;
+    }
+  } catch {}
+
+  // Compute relative age-bracket boundaries from threshold
+  // 🟢 Fresh   = 0%–25%  of threshold
+  // 🟡 Aging   = 26%–60% of threshold
+  // 🟠 At Risk = 61%–99% of threshold
+  // 🔴 Stale   = threshold+
+  const freshMax = Math.floor(threshold * 0.25); // last day of Fresh
+  const agingMax = Math.floor(threshold * 0.6); // last day of Aging
+  const atRiskMax = threshold - 1; // last day of At Risk
+  let cards = [];
+  let allCards = [];
+  let boardName = "";
+  let fetchError = null;
+  let doneListIds = new Set();
+
+  try {
+    // Get the board ID of the board currently open in Trello
+    const boardId = await t.board("id").then((b) => b.id);
+
+    // Fetch all open lists on this board in one call
+    const lists = await trelloFetch(
+      `/boards/${boardId}/lists?filter=open&fields=id,name`,
+      token,
+    );
+
+    // Identify done-list IDs so we can exclude them
+    doneListIds = new Set(
+      lists.filter((l) => DONE_LIST_PATTERN.test(l.name)).map((l) => l.id),
+    );
+
+    // Fetch all open (non-archived) cards on the board
+    allCards = await trelloFetch(
+      `/boards/${boardId}/cards/open?fields=id,name,dateLastActivity,idMembers,idList`,
+      token,
+    );
+
+    // Exclude cards that live in done lists
+    cards = allCards.filter((c) => !doneListIds.has(c.idList));
+
+    // Also grab board name for the header
+    const boardInfo = await trelloFetch(
+      `/boards/${boardId}?fields=name`,
+      token,
+    );
+    boardName = boardInfo.name || boardName;
+  } catch (e) {
+    console.error("Error fetching board data:", e);
+    fetchError = e.message || "Unknown error";
+  }
+
+  // ── 2. Classify cards ───────────────────────────────────────────────────
+  const stale = cards.filter((c) => daysSince(c.dateLastActivity) >= threshold);
+  const atRisk = cards.filter((c) => {
+    const d = daysSince(c.dateLastActivity);
+    return d > agingMax && d < threshold;
+  });
+  const unassigned = cards.filter((c) => !c.idMembers?.length);
+  const fresh = cards.filter((c) => daysSince(c.dateLastActivity) <= freshMax);
+  const aging = cards.filter((c) => {
+    const d = daysSince(c.dateLastActivity);
+    return d > freshMax && d <= agingMax;
+  });
+
+  const total = allCards.length;
+  const maxAge = Math.max(
+    fresh.length,
+    aging.length,
+    atRisk.length,
+    stale.length,
+    1,
+  );
+
+  // ── 3. Health score ─────────────────────────────────────────────────────
+  const health = computeHealthScore(allCards, stale, atRisk, doneListIds);
+  const { label: catLabel, color: healthColor } = healthCategory(health);
+
+  // ── 4. Trend ────────────────────────────────────────────────────────────
+  const { history: trendHistory, trend } = await updateTrend(health);
+
+  // ── 5. Last-updated timestamp  ───────────────────────────────────────────
+  const now = new Date();
+  const updatedAt = now.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  // ── 6. Render ───────────────────────────────────────────────────────────
+  root.innerHTML = `
+          <div class="declutter-shell h-[100dvh] max-h-[100dvh] overflow-hidden rounded-lg bg-[#050a11] text-left shadow-2xl">
+
+            <!-- Header -->
+            <div class="flex items-center justify-between border-b border-white/10 px-5 py-4">
+              <div class="flex items-center gap-3">
+                <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white">${icon("brush", 22)}</div>
+                <div>
+                  <div class="text-xl font-bold leading-5 text-white">Declutter</div>
+                  <div class="mt-1 text-xs text-slate-400">Stale Card Manager for Trello</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <!-- 
+                  <button id="refresh" class="flex items-center gap-2 rounded-md bg-transparent px-2 py-1 text-xs text-slate-300 hover:bg-white/5 hover:text-white">${icon("refresh", 15)} Refresh</button>
+                <div class="h-6 w-px bg-white/10"></div>
+                <button id="close" class="rounded-md bg-transparent p-1 text-slate-400 hover:bg-white/5 hover:text-white" aria-label="Close">${icon("x", 20)}</button> 
+                -->
+              </div>
+            </div>
+
+            <!-- Scrollable body -->
+            <div class="h-[calc(100dvh-65px)] overflow-y-auto p-4 scrollbar-thin">
+              <div class="space-y-3">
+
+                ${
+                  fetchError
+                    ? `
+                  <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-400">
+                    ${icon("circleAlert", 16)} Could not fetch board data: ${fetchError}. Showing partial or empty results.
+                  </div>`
+                    : ""
+                }
+
+                <!-- Board Health Score -->
+                <section class="rounded-lg bg-[#0b1320] p-6">
+                  <div class="health-grid grid grid-cols-[120px_minmax(0,1fr)_170px] items-center gap-6">
+
+                    <!-- Donut circle -->
+                    <div class="relative h-[104px] w-[104px]">
+                      ${circle(health, healthColor)}
+                      <div class="absolute inset-0 flex flex-col items-center justify-center">
+                        <span class="text-4xl font-bold leading-none" style="color:${healthColor}">${health}</span>
+                        <span class="text-sm text-slate-300">/100</span>
+                      </div>
+                    </div>
+
+                    <!-- Labels -->
+                    <div>
+                      <h2 class="text-lg font-bold text-white">Board Health Score</h2>
+                      <div class="mt-1 text-xs text-slate-400 truncate">${boardName}</div>
+                      <div class="mt-2 flex items-center gap-2 text-sm" style="color:${healthColor}">
+                        ${catLabel} ${icon("check", 15)}
+                      </div>
+                      <div class="mt-4 text-xs text-slate-400">Last updated: ${updatedAt}</div>
+                    </div>
+
+                    <!-- Sweep Rules (compact) -->
+                    <div class="rounded-lg border border-white/10 bg-[#07101b] p-5 h-full flex flex-col justify-center">
+                      <h2 class="text-base font-bold text-white">Sweep Rules</h2>
+                      <label class="mt-3 block text-xs text-slate-300 leading-snug">Days before a card is considered stale</label>
+                      <div class="mt-3 flex items-center gap-3">
+                        <input id="thresholdInput" type="number" value="${threshold}" min="1" max="365"
+                          class="h-9 w-24 rounded-md border border-white/10 bg-[#0b1320] px-3 text-sm text-white outline-none">
+                        <span class="text-sm text-slate-300">days</span>
+                      </div>
+                    </div>
+
+                  </div>
+                </section>
+
+                <!-- Stat cards -->
+                <div class="stats-grid grid grid-cols-3 gap-3">
+                  ${statCard({ iconName: "circleAlert", label: "Stale Cards", count: stale.length, sub: "Need immediate action", color: "#ef4444", btnId: "view-stale-cards" })}
+                  ${statCard({ iconName: "alert", label: "At Risk Cards", count: atRisk.length, sub: "May become stale soon", color: "#f59e0b", btnId: "view-at-risk-cards" })}
+                  ${statCard({ iconName: "user", label: "Unassigned Cards", count: unassigned.length, sub: "No members assigned", color: "#a855f7", btnId: "view-unassigned-cards" })}
+                </div>
+
+                <!-- Aging Distribution -->
+                <section class="rounded-lg border border-white/10 bg-[#0b1320] p-4">
+                  <h2 class="mb-4 text-base font-bold text-white">Aging Distribution</h2>
+                  <div class="aging-flex flex items-center gap-7">
+                    <div class="flex-1 space-y-4">
+                      ${ageBar(`Fresh (0–${freshMax} days)`, "#22c55e", fresh.length, maxAge)}
+                      ${ageBar(`Aging (${freshMax + 1}–${agingMax} days)`, "#facc15", aging.length, maxAge)}
+                      ${ageBar(`At Risk (${agingMax + 1}–${atRiskMax} days)`, "#f97316", atRisk.length, maxAge)}
+                      ${ageBar(`Stale (${threshold}+ days)`, "#ef4444", stale.length, maxAge)}
+                    </div>
+                    ${donut(fresh.length, aging.length, atRisk.length, stale.length, total)}
+                  </div>
+                </section>
+
+                <!-- Sweep Rules -->
+                <!-- <section class="rules-grid grid grid-cols-[1fr_1.15fr_1fr] rounded-lg border border-white/10 bg-[#0b1320] p-4">
+                  <div class="rule-section border-r border-white/10 pr-5">
+                    <h2 class="text-base font-bold text-white">Sweep Rules</h2>
+                    <label class="mt-4 block text-xs text-slate-300">Days before a card is considered stale</label>
+                    <div class="mt-3 flex items-center gap-3">
+                      <input id="thresholdInput" type="number" value="${threshold}" min="1" max="365"
+                        class="h-9 w-24 rounded-md border border-white/10 bg-[#07101b] px-3 text-sm text-white outline-none">
+                      <span class="text-sm text-slate-300">days</span>
+                    </div>
+                  </div>
+                  <div class="rule-section border-r border-white/10 px-5">
+                    <div class="mb-3 text-xs text-slate-300">When a card becomes stale</div>
+                    <div class="space-y-2">
+                      ${[
+                        "Move to Stale List",
+                        "Archive Card",
+                        "Add Label",
+                        "Move to Another List",
+                      ]
+                        .map(
+                          (label, i) =>
+                            `<label class="flex cursor-pointer items-center gap-2 text-sm text-slate-200"><input type="radio" name="sweepAction" class="h-4 w-4 accent-blue-600" ${i === 0 ? "checked" : ""}>${label}</label>`,
+                        )
+                        .join("")}
+                    </div>
+                  </div>
+                  <div class="rule-section pl-5">
+                    <label class="flex cursor-pointer items-center gap-2 text-sm text-white">
+                      <input type="checkbox" checked class="h-4 w-4 accent-blue-600">Auto Sweep Enabled
+                    </label>
+                    <p class="mt-2 text-xs leading-5 text-slate-400">Automatically apply the rule on schedule.</p>
+                    <label class="mt-5 block text-xs text-slate-300">Sweep Frequency</label>
+                    <select class="mt-2 h-9 w-full rounded-md border border-white/10 bg-[#07101b] px-3 text-sm text-white outline-none">
+                      <option>Daily</option><option>Weekly</option><option>Monthly</option>
+                    </select>
+                  </div>
+                </section> -->
+
+                <!-- Weekly Cleanup Summary -->
+                <!--<section class="rounded-lg border border-white/10 bg-[#0b1320] p-4">
+                  <div class="mb-3 flex items-center justify-between">
+                    <h2 class="text-base font-bold text-white">Weekly Cleanup Summary</h2>
+                    <button class="flex items-center gap-2 rounded-md border border-blue-500/70 bg-transparent px-3 py-1.5 text-xs text-blue-400 hover:bg-blue-500/10">
+                      View Full Summary ${icon("arrow", 13)}
+                    </button>
+                  </div>
+                  <div class="summary-grid grid grid-cols-3">
+                    <div class="summary-item flex flex-col items-center border-r border-white/10 px-4 text-center">
+                      <div class="flex items-center gap-2 text-green-500">${icon("check", 24)}<span class="text-2xl font-bold">—</span></div>
+                      <div class="mt-1 text-sm text-white">Cards Swept</div>
+                      <div class="text-xs text-slate-400">Automatically moved</div>
+                      <button class="mt-2 flex items-center gap-1 bg-transparent p-0 text-xs font-medium text-green-500">View All ${icon("arrow", 13)}</button>
+                    </div>
+                    <div class="summary-item flex flex-col items-center border-r border-white/10 px-4 text-center">
+                      <div class="flex items-center gap-2 text-blue-500">${icon("rotate", 24)}<span class="text-2xl font-bold">—</span></div>
+                      <div class="mt-1 text-sm text-white">Cards Revived</div>
+                      <div class="text-xs text-slate-400">Stale cards made active again</div>
+                      <button class="mt-2 flex items-center gap-1 bg-transparent p-0 text-xs font-medium text-blue-500">View All ${icon("arrow", 13)}</button>
+                    </div>
+                    <div class="summary-item flex flex-col items-center px-4 text-center">
+                      <div class="flex items-center gap-2 text-amber-500">${icon("clock", 24)}<span class="text-2xl font-bold">${stale.length}</span></div>
+                      <div class="mt-1 text-sm text-white">Currently Stale</div>
+                      <div class="text-xs text-slate-400">Cards past stale threshold</div>
+                      <button class="mt-2 flex items-center gap-1 bg-transparent p-0 text-xs font-medium text-amber-500">View All ${icon("arrow", 13)}</button>
+                    </div>
+                  </div>
+                </section>-->
+
+                <!-- Sweep button -->
+                <!-- <button id="sweep" class="flex h-11 w-full items-center justify-center gap-3 rounded-md bg-blue-600 text-base font-bold text-white transition hover:bg-blue-500">
+                  ${icon("brush", 18)} Sweep ${stale.length} Stale Card${stale.length === 1 ? "" : "s"}
+                </button>
+                <p class="-mt-1 flex items-center justify-center gap-2 text-xs text-slate-500">
+                  ${icon("info", 14)} Stale cards will be processed based on the rule above.
+                </p> -->
+
+                <!-- Quick Actions -->
+                <!-- <section class="rounded-lg border border-white/10 bg-[#0b1320] p-4">
+                  <h2 class="mb-3 text-sm font-bold text-white">Quick Actions</h2>
+                  <div class="quick-grid grid grid-cols-4 gap-3">
+                    ${[
+                      [
+                        "circleAlert",
+                        "View Stale Cards",
+                        `${stale.length} cards`,
+                        "#ef4444",
+                      ],
+                      [
+                        "alert",
+                        "View At Risk Cards",
+                        `${atRisk.length} cards`,
+                        "#f59e0b",
+                      ],
+                      [
+                        "user",
+                        "View Unassigned Cards",
+                        `${unassigned.length} cards`,
+                        "#a855f7",
+                      ],
+                      ["chart", "View Cleanup Summary", "This week", "#3b82f6"],
+                    ]
+                      .map(
+                        ([iconName, label, sub, color]) => `
+                      <button class="flex min-h-12 items-center justify-between rounded-md border border-white/10 bg-[#111a28] px-3 text-left transition hover:border-white/20 hover:bg-[#162236]">
+                        <span class="flex min-w-0 items-center gap-2">
+                          <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full" style="background:${color}20;color:${color}">${icon(iconName, 15)}</span>
+                          <span class="min-w-0">
+                            <span class="block truncate text-xs font-medium text-white">${label}</span>
+                            <span class="block truncate text-[11px] text-slate-400">${sub}</span>
+                          </span>
+                        </span>
+                        ${icon("arrow", 13, "shrink-0 text-slate-400")}
+                      </button>`,
+                      )
+                      .join("")}
+                  </div>
+                </section> -->
+
+              </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="flex items-center justify-between border-t border-white/10 px-5 py-3 text-xs text-slate-400">
+              <span class="flex items-center gap-2">${icon("spark", 14)} Powering cleaner, healthier boards</span>
+              <button class="flex items-center gap-2 bg-transparent p-0 text-xs text-slate-400 hover:text-white">Need help? ${icon("help", 14)}</button>
+            </div>
+
+          </div>`;
+
+  // ── Wire up buttons ─────────────────────────────────────────────────────
+  document.getElementById("close")?.addEventListener("click", () => {
+    if (typeof t.closeModal === "function") t.closeModal();
+    else t.closePopup();
+  });
+
+  document.getElementById("refresh")?.addEventListener("click", () => {
+    renderDashboard(root, token);
+  });
+
+  // Save threshold on change and re-render so all ranges update live
+  document
+    .getElementById("thresholdInput")
+    ?.addEventListener("change", async (e) => {
+      const val = parseInt(e.target.value, 10);
+      if (Number.isFinite(val) && val > 0) {
+        try {
+          await t.set("board", "shared", "staleThreshold", val);
+        } catch {}
+        renderDashboard(root, token);
+      }
+    });
+
+  function getModalHeight() {
+    const availableHeight =
+      (window.screen && window.screen.availHeight) || window.innerHeight || 680;
+
+    return Math.max(420, Math.min(620, availableHeight - 220));
+  }
+
+  document.getElementById("view-stale-cards")?.addEventListener("click", () => {
+    window.location.href = t.signUrl("./stale-cards.html");
+  });
+
+  document
+    .getElementById("view-at-risk-cards")
+    ?.addEventListener("click", () => {
+      window.location.href = t.signUrl("./at-risk-cards.html");
+    });
+
+  document
+    .getElementById("view-unassigned-cards")
+    ?.addEventListener("click", () => {
+      window.location.href = t.signUrl("./unassigned-cards.html");
+    });
+
+  document.getElementById("sweep")?.addEventListener("click", () => {
+    if (stale.length === 0) {
+      alert("No stale cards to sweep!");
+      return;
+    }
+    // Placeholder: real sweep logic will go here.
+    alert(
+      `Sweeping ${stale.length} stale card${stale.length === 1 ? "" : "s"}…`,
+    );
+  });
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────
+(async () => {
+  const root = document.getElementById("root");
+  let token;
+  try {
+    token = await getToken();
+  } catch {}
+
+  if (token) {
+    renderDashboard(root, token);
+  } else {
+    renderSignIn(root, (newToken) => renderDashboard(root, newToken));
+  }
+})();
