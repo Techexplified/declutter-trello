@@ -1,0 +1,618 @@
+const t = TrelloPowerUp.iframe();
+const TRELLO_APP_KEY = "2082693e62994dce1c1cba5f43e4711b";
+const DONE_LIST_PATTERN = /\b(done|completed|closed|finished|stale)\b/i;
+
+// ── Helpers ─────────────────────────────────────────────────────────────
+function getToken() {
+  return t.get("member", "private", "token");
+}
+
+function trelloFetch(path, token) {
+  const sep = path.includes("?") ? "&" : "?";
+  return fetch(
+    `https://api.trello.com/1${path}${sep}key=${TRELLO_APP_KEY}&token=${token}`,
+  ).then((r) => {
+    if (!r.ok) throw new Error(`Trello API ${r.status}: ${path}`);
+    return r.json();
+  });
+}
+
+function daysSince(dateStr) {
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000);
+}
+
+function fmtDate(dateStr) {
+  return new Date(dateStr).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function daysClass(days) {
+  if (days >= 60) return "days-critical";
+  if (days >= 45) return "days-high";
+  return "days-medium";
+}
+
+function icon(name, size = 16, cls = "") {
+  const attrs = `width="${size}" height="${size}" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" class="${cls}"`;
+  const paths = {
+    arrowLeft: '<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>',
+    alert:
+      '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
+    sweep:
+      '<path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 0 1 4.03 4.03L13.1 15.94"/><path d="M7.07 14A3.99 3.99 0 0 0 3 18c0 1 0 3-2 3 0 0 4 0 6-2a3.99 3.99 0 0 0 .07-5Z"/>',
+    x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>',
+    sort: '<path d="M3 6h18M7 12h10M11 18h2"/>',
+    open: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
+    archive:
+      '<polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>',
+    dots: '<circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>',
+    check: '<polyline points="20 6 9 12 4 10"/>',
+    spin: '<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+    list: '<line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><polyline points="4 6 5 7 7 5"/><polyline points="4 12 5 13 7 11"/><polyline points="4 18 5 19 7 17"/>',
+    help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 1 1 5.82 1c0 2-3 2-3 4"/><path d="M12 17h.01"/>',
+  };
+  return `<svg ${attrs}>${paths[name] ?? ""}</svg>`;
+}
+
+// ── Loading screen ───────────────────────────────────────────────────────
+function renderLoading(root) {
+  root.innerHTML = `
+          <div class="flex h-full flex-col items-center justify-center gap-3 text-slate-400">
+            <svg class="spin" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round">
+              <circle cx="12" cy="12" r="9" opacity="0.15"></circle>
+              <path d="M12 3a9 9 0 0 1 9 9"></path>
+            </svg>
+            <span class="text-sm">Loading at-risk cards…</span>
+            <span class="text-sm">Loading stale cards…</span>
+          </div>`;
+}
+
+// ── Main render ──────────────────────────────────────────────────────────
+async function render() {
+  const root = document.getElementById("root");
+  renderLoading(root);
+
+  let token;
+  try {
+    token = await getToken();
+  } catch {}
+  if (!token) {
+    root.innerHTML = `<div class="flex h-full items-center justify-center text-sm text-red-400 p-6 text-center">
+            Not authenticated. Please open Declutter from the main popup first.</div>`;
+    return;
+  }
+
+  // ── Fetch data ─────────────────────────────────────────────────────────
+  let staleCards = []; // enriched: { id, name, listName, daysInactive, lastActivity }
+  let totalStale = 0;
+  let listsAffected = 0;
+  let fetchError = null;
+  let threshold = 30;
+  let boardId = null;
+  let openLists = []; // raw { id, name } list of open lists on the board
+
+  try {
+    threshold = (await t.get("board", "shared", "staleThreshold")) || 30;
+    boardId = await t.board("id").then((b) => b.id);
+
+    const [lists, allCards] = await Promise.all([
+      trelloFetch(`/boards/${boardId}/lists?filter=open&fields=id,name`, token),
+      trelloFetch(
+        `/boards/${boardId}/cards/open?fields=id,name,dateLastActivity,idList`,
+        token,
+      ),
+    ]);
+    openLists = lists;
+
+    const listMap = Object.fromEntries(lists.map((l) => [l.id, l.name]));
+    const doneIds = new Set(
+      lists.filter((l) => DONE_LIST_PATTERN.test(l.name)).map((l) => l.id),
+    );
+
+    staleCards = allCards
+      .filter(
+        (c) =>
+          !doneIds.has(c.idList) && daysSince(c.dateLastActivity) >= threshold,
+      )
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        listName: listMap[c.idList] ?? "Unknown",
+        daysInactive: daysSince(c.dateLastActivity),
+        lastActivity: c.dateLastActivity,
+      }))
+      .sort((a, b) => b.daysInactive - a.daysInactive);
+
+    totalStale = staleCards.length;
+    listsAffected = new Set(staleCards.map((c) => c.listName)).size;
+  } catch (e) {
+    fetchError = e.message || "Unknown error";
+  }
+
+  // ── State ──────────────────────────────────────────────────────────────
+  let searchQuery = "";
+  let sortDir = "desc"; // "desc" = oldest first, "asc" = newest first
+  let filterList = "all";
+  let selected = new Set();
+
+  const uniqueLists = [...new Set(staleCards.map((c) => c.listName))].sort();
+
+  // ── Re-render table only ───────────────────────────────────────────────
+  function filteredCards() {
+    return staleCards
+      .filter((c) => {
+        const matchSearch = c.name
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase());
+        const matchList = filterList === "all" || c.listName === filterList;
+        return matchSearch && matchList;
+      })
+      .sort((a, b) =>
+        sortDir === "desc"
+          ? b.daysInactive - a.daysInactive
+          : a.daysInactive - b.daysInactive,
+      );
+  }
+
+  function updateActionBar() {
+    const bar = document.getElementById("action-bar");
+    const countEl = document.getElementById("sel-count");
+    if (!bar || !countEl) return;
+    countEl.textContent = `${selected.size} selected`;
+    if (selected.size > 0) {
+      bar.classList.remove("hidden-bar");
+    } else {
+      bar.classList.add("hidden-bar");
+    }
+  }
+
+  function renderRows() {
+    const tbody = document.getElementById("card-tbody");
+    if (!tbody) return;
+    const cards = filteredCards();
+    if (cards.length === 0) {
+      tbody.innerHTML = `
+              <tr>
+                <td colspan="5" class="py-10 text-center text-sm text-slate-500">
+                  No stale cards match your search / filter.
+                </td>
+              </tr>`;
+      return;
+    }
+    tbody.innerHTML = cards
+      .map(
+        (c) => `
+            <tr class="border-b border-white/5 group" data-id="${c.id}">
+              <td class="py-3 pl-4 pr-2 w-8">
+                <input type="checkbox" class="row-check" data-id="${c.id}"
+                  ${selected.has(c.id) ? "checked" : ""}>
+              </td>
+              <td class="py-3 pr-4">
+                <div class="flex items-center gap-2">
+                  <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[#ef444422] text-red-400 text-[11px] font-bold">
+                    ${icon("list", 14)}
+                  </span>
+                  <div>
+                    <div class="text-sm font-medium text-white leading-snug">${escHtml(c.name)}</div>
+                  </div>
+                </div>
+              </td>
+              <td class="py-3 pr-4">
+                <span class="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium
+                  bg-white/5 text-slate-300 border border-white/10">
+                  <span class="h-1.5 w-1.5 rounded-full bg-blue-400"></span>
+                  ${escHtml(c.listName)}
+                </span>
+              </td>
+              <td class="py-3 pr-4 tabular-nums">
+                <span class="font-semibold text-sm ${daysClass(c.daysInactive)}">${c.daysInactive} days</span>
+              </td>
+              <td class="py-3 pr-4 text-sm text-slate-400 tabular-nums">${fmtDate(c.lastActivity)}</td>
+              <td class="py-3 pr-4">
+                    <div class="flex items-center gap-1">
+                        <button class="btn-open flex items-center gap-1 rounded-md border border-white/10 bg-transparent
+                        px-2 py-1 text-xs text-slate-300 hover:bg-white/5 hover:text-white"
+                        data-id="${c.id}">
+                        Open ${icon("open", 12)}
+                        </button>
+
+                        <button class="rounded-md border border-white/10 bg-transparent p-1.5 text-slate-400 hover:bg-white/5 hover:text-white">
+                        ${icon("dots", 14)}
+                        </button>
+                    </div>
+              </td>
+            </tr>`,
+      )
+      .join("");
+
+    // Wire checkboxes
+    tbody.querySelectorAll(".row-check").forEach((cb) => {
+      cb.addEventListener("change", () => {
+        const id = cb.dataset.id;
+        if (cb.checked) selected.add(id);
+        else selected.delete(id);
+        syncMasterCheck();
+        updateActionBar();
+      });
+    });
+
+    // Wire Open buttons
+    tbody.querySelectorAll(".btn-open").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const cardId = btn.dataset.id;
+        t.navigate({ url: `https://trello.com/c/${cardId}` });
+        await t.closeModal();
+      });
+    });
+  }
+
+  function syncMasterCheck() {
+    const master = document.getElementById("master-check");
+    if (!master) return;
+    const cards = filteredCards();
+    const allChecked =
+      cards.length > 0 && cards.every((c) => selected.has(c.id));
+    master.checked = allChecked;
+    master.indeterminate = !allChecked && cards.some((c) => selected.has(c.id));
+  }
+
+  // ── Full page HTML ─────────────────────────────────────────────────────
+  root.innerHTML = `
+          <!-- Header -->
+          <div class="flex items-center justify-between border-b border-white/10 px-5 py-4 shrink-0">
+            <div class="flex items-center gap-3">
+              <button id="btn-back"
+                class="flex items-center gap-1.5 rounded-md bg-transparent px-2 py-1 text-sm text-slate-400
+                  hover:bg-white/5 hover:text-white">
+                ${icon("arrowLeft", 16)} Back
+              </button>
+              <div class="h-5 w-px bg-white/10"></div>
+              <div class="flex items-center gap-2">
+                <div class="flex h-7 w-7 items-center justify-center rounded-full bg-red-500/20 text-red-400">
+                  ${icon("alert", 16)}
+                </div>
+                <span class="text-lg font-bold text-white">Stale Cards</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sub-header: Summary -->
+          <div class="border-b border-white/10 px-5 py-3 shrink-0">
+            <div class="grid grid-cols-[1fr_1fr_1fr_1.35fr] gap-3">
+
+              <!-- Total Stale -->
+              <div class="flex items-center gap-3 rounded-lg border border-white/10 bg-[#0b1320] px-4 py-2">
+                <span class="text-xl font-bold text-red-400">${totalStale}</span>
+                <span class="text-xs text-slate-400">Total Stale Cards</span>
+              </div>
+
+              <!-- Days Inactive -->
+              <div class="flex items-center gap-3 rounded-lg border border-white/10 bg-[#0b1320] px-4 py-2">
+                <span class="text-xl font-bold text-white">${threshold}+</span>
+                <span class="text-xs text-slate-400">Days Inactive</span>
+              </div>
+
+              <!-- Lists Affected -->
+              <div class="flex items-center gap-3 rounded-lg border border-white/10 bg-[#0b1320] px-4 py-2">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#94a3b8"
+                  stroke-width="2"
+                >
+                  <rect x="3" y="3" width="7" height="7"/>
+                  <rect x="14" y="3" width="7" height="7"/>
+                  <rect x="14" y="14" width="7" height="7"/>
+                  <rect x="3" y="14" width="7" height="7"/>
+                </svg>
+                <span class="text-xl font-bold text-white">${listsAffected}</span>
+                <span class="text-xs text-slate-400">Lists Affected</span>
+              </div>
+
+             <div></div>
+
+            </div>
+          </div>
+
+          ${
+            fetchError
+              ? `
+          <div class="mx-5 mt-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400 shrink-0">
+            ${icon("alert", 14)} Could not fully load board data: ${fetchError}
+          </div>`
+              : ""
+          }
+
+          <!-- Toolbar: search + filter + sort -->
+          <div class="flex items-center gap-3 px-5 py-3 border-b border-white/10 shrink-0 flex-wrap">
+            <!-- Search -->
+            <div class="relative flex-1 min-w-[180px]">
+              <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+                ${icon("search", 15)}
+              </span>
+              <input id="search-input" type="text" placeholder="Search stale cards…"
+                value="${escAttr(searchQuery)}"
+                class="h-9 w-full rounded-md border border-white/10 bg-[#0b1320] pl-9 pr-3 text-sm
+                  text-white placeholder-slate-500 outline-none focus:border-blue-500/60">
+            </div>
+            <!-- List filter -->
+            <select id="list-filter"
+              class="h-9 rounded-md border border-white/10 bg-[#0b1320] px-3 text-sm text-white outline-none
+                min-w-[130px]">
+              <option value="all">All Lists</option>
+              ${uniqueLists.map((l) => `<option value="${escAttr(l)}" ${filterList === l ? "selected" : ""}>${escHtml(l)}</option>`).join("")}
+            </select>
+            <!-- Sort -->
+            <button id="btn-sort"
+              class="flex h-9 items-center gap-2 rounded-md border border-white/10 bg-[#0b1320]
+                px-3 text-sm text-slate-300 hover:bg-white/5 hover:text-white">
+              ${icon("sort", 15)}
+              <span id="sort-label">Sort: Oldest First</span>
+            </button>
+          </div>
+
+          <!-- Table -->
+          <div class="flex-1 overflow-y-auto scrollbar-thin">
+            <table>
+              <thead>
+                <tr class="border-b border-white/10 text-xs text-slate-500 uppercase tracking-wide">
+                  <th class="py-3 pl-4 pr-2 w-8 text-left">
+                    <input type="checkbox" id="master-check">
+                  </th>
+                  <th class="py-3 pr-4 text-left font-medium">Card</th>
+                  <th class="py-3 pr-4 text-left font-medium">List</th>
+                  <th class="py-3 pr-4 text-left font-medium">Days Inactive</th>
+                  <th class="py-3 pr-4 text-left font-medium">Last Activity</th>
+                  <th class="py-3 pr-4 text-left font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="card-tbody"></tbody>
+            </table>
+          </div>
+
+          <!-- Bottom action bar (shown when rows selected) -->
+          <div id="action-bar"
+            class="hidden-bar flex items-center justify-between border-t border-white/10 bg-[#0b1320] px-5 py-3 shrink-0">
+            <span id="sel-count" class="text-sm text-slate-400">0 selected</span>
+            <div class="flex items-center gap-2">
+              <button id="btn-archive"
+                class="flex items-center gap-2 rounded-md border border-white/10 bg-transparent px-3 py-1.5
+                  text-sm text-slate-300 hover:bg-white/5 hover:text-white">
+                ${icon("archive", 14)} Archive
+              </button>
+              
+              <!-- Sweep All -->
+              <button
+                id="btn-sweep-all"
+                class="sweep-btn flex h-full items-center justify-center gap-2 rounded-md bg-red-600 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-red-500"
+              >
+                ${icon("sweep", 15)}
+                Sweep All Stale Cards
+              </button>
+            </div>
+          </div>`;
+
+  // ── Render rows initially ──────────────────────────────────────────────
+  renderRows();
+
+  // ── Wire controls ─────────────────────────────────────────────────────
+  document.getElementById("btn-back")?.addEventListener("click", () => {
+    window.location.href = t.signUrl("./popup.html");
+  });
+
+  document.getElementById("search-input")?.addEventListener("input", (e) => {
+    searchQuery = e.target.value;
+    renderRows();
+    syncMasterCheck();
+  });
+
+  document.getElementById("list-filter")?.addEventListener("change", (e) => {
+    filterList = e.target.value;
+    renderRows();
+    syncMasterCheck();
+  });
+
+  document.getElementById("btn-sort")?.addEventListener("click", () => {
+    sortDir = sortDir === "desc" ? "asc" : "desc";
+    document.getElementById("sort-label").textContent =
+      sortDir === "desc" ? "Sort: Oldest First" : "Sort: Newest First";
+    renderRows();
+    syncMasterCheck();
+  });
+
+  document.getElementById("master-check")?.addEventListener("change", (e) => {
+    filteredCards().forEach((c) => {
+      if (e.target.checked) selected.add(c.id);
+      else selected.delete(c.id);
+    });
+    renderRows();
+    updateActionBar();
+  });
+
+  document
+    .getElementById("btn-sweep-all")
+    ?.addEventListener("click", async () => {
+      if (staleCards.length === 0) {
+        alert("No stale cards to sweep!");
+        return;
+      }
+      if (!boardId) {
+        alert(
+          "Could not determine the current board — try reopening Declutter.",
+        );
+        return;
+      }
+
+      const btn = document.getElementById("btn-sweep-all");
+      const originalLabel = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `${icon("spin", 15, "spin")} Sweeping...`;
+
+      try {
+        const freshToken = await getToken();
+
+        // Find an existing "Stale" list on this board (case-insensitive,
+        // exact name match) to avoid creating duplicates on repeated
+        // sweeps; otherwise create a new one.
+        let staleListId = openLists.find(
+          (l) => l.name.trim().toLowerCase() === "stale",
+        )?.id;
+
+        if (!staleListId) {
+          const newList = await fetch(
+            `https://api.trello.com/1/lists?key=${TRELLO_APP_KEY}&token=${freshToken}` +
+              `&idBoard=${boardId}&name=${encodeURIComponent("Stale")}`,
+            { method: "POST" },
+          ).then((r) => {
+            if (!r.ok) throw new Error("Failed to create Stale list");
+            return r.json();
+          });
+          staleListId = newList.id;
+          openLists.push({ id: staleListId, name: "Stale" });
+        }
+
+        // Move every stale card into the Stale list.
+        const cardIds = staleCards.map((c) => c.id);
+        const results = await Promise.allSettled(
+          cardIds.map((cardId) =>
+            fetch(
+              `https://api.trello.com/1/cards/${cardId}?key=${TRELLO_APP_KEY}&token=${freshToken}` +
+                `&idList=${staleListId}`,
+              { method: "PUT" },
+            ).then((r) => {
+              if (!r.ok) throw new Error(`Failed to move card ${cardId}`);
+            }),
+          ),
+        );
+
+        const failedCount = results.filter(
+          (r) => r.status === "rejected",
+        ).length;
+        const movedIds = new Set(
+          cardIds.filter((_, i) => results[i].status === "fulfilled"),
+        );
+
+        // Remove successfully-moved cards from local state.
+        staleCards = staleCards.filter((c) => !movedIds.has(c.id));
+        [...movedIds].forEach((id) => selected.delete(id));
+
+        totalStale = staleCards.length;
+        listsAffected = new Set(staleCards.map((c) => c.listName)).size;
+
+        document.querySelectorAll(
+          ".text-red-400.text-xl.font-bold",
+        )[0].textContent = totalStale;
+        document.querySelectorAll(
+          ".text-white.text-xl.font-bold",
+        )[1].textContent = listsAffected;
+
+        renderRows();
+        syncMasterCheck();
+        updateActionBar();
+
+        if (failedCount > 0) {
+          alert(
+            `Moved ${movedIds.size} card(s) to "Stale". ${failedCount} card(s) failed to move — please check them directly on Trello.`,
+          );
+        }
+      } catch (err) {
+        console.error(err);
+        alert(
+          "Failed to sweep stale cards — could not create or find the Stale list.",
+        );
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalLabel;
+      }
+    });
+
+  document
+    .getElementById("btn-archive")
+    ?.addEventListener("click", async () => {
+      if (selected.size === 0) return;
+
+      const btn = document.getElementById("btn-archive");
+      btn.disabled = true;
+      btn.innerHTML = `${icon("spin", 14, "spin")} Archiving...`;
+
+      try {
+        const token = await getToken();
+
+        // Archive every selected card
+        await Promise.all(
+          [...selected].map((cardId) =>
+            fetch(
+              `https://api.trello.com/1/cards/${cardId}?key=${TRELLO_APP_KEY}&token=${token}`,
+              {
+                method: "PUT",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  closed: true,
+                }),
+              },
+            ).then((r) => {
+              if (!r.ok) throw new Error(`Failed to archive card ${cardId}`);
+            }),
+          ),
+        );
+
+        // Remove archived cards from local data
+        staleCards = staleCards.filter((c) => !selected.has(c.id));
+
+        selected.clear();
+
+        totalStale = staleCards.length;
+        listsAffected = new Set(staleCards.map((c) => c.listName)).size;
+
+        // Update summary cards
+        document.querySelectorAll(
+          ".text-red-400.text-xl.font-bold",
+        )[0].textContent = totalStale;
+
+        document.querySelectorAll(
+          ".text-white.text-xl.font-bold",
+        )[1].textContent = listsAffected;
+
+        renderRows();
+        syncMasterCheck();
+        updateActionBar();
+      } catch (err) {
+        console.error(err);
+        alert("Failed to archive one or more cards.");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `${icon("archive", 14)} Archive`;
+      }
+    });
+
+  document.getElementById("btn-deselect")?.addEventListener("click", () => {
+    selected.clear();
+    renderRows();
+    syncMasterCheck();
+    updateActionBar();
+  });
+}
+
+// ── Escape helpers ────────────────────────────────────────────────────────
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+function escAttr(str) {
+  return escHtml(str);
+}
+
+render();
